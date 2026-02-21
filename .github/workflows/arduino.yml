@@ -71,11 +71,20 @@ jobs:
                   echo "name=$NAME" >> "$GITHUB_OUTPUT"
                   echo "Detected: $NAME v$VERSION from tag"
 
+            - name: Create library archive
+              run: |
+                  cd lib/HXTP
+                  zip -r ../../${{ steps.version.outputs.name }}-${{ steps.version.outputs.version }}.zip .
+                  cd ../..
+                  ls -lh ${{ steps.version.outputs.name }}-${{ steps.version.outputs.version }}.zip
+
             - name: Create GitHub Release (triggered by tag push)
               uses: softprops/action-gh-release@v2
               with:
                   tag_name: ${{ steps.version.outputs.tag }}
                   name: "${{ steps.version.outputs.name }} ${{ steps.version.outputs.tag }}"
+                  files: |
+                      ${{ steps.version.outputs.name }}-${{ steps.version.outputs.version }}.zip
                   body: |
                       ## ${{ steps.version.outputs.name }} v${{ steps.version.outputs.version }}
 
