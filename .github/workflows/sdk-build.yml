@@ -1,0 +1,214 @@
+# ═══════════════════════════════════════════════════════════════════
+#  HXTP Embedded SDK — CI Pipeline
+#
+#  Matrix build: esp32s3, esp32, esp8266
+#  Size guardrails: Flash ≤ 85%, RAM ≤ 50%
+#  Artifact: firmware binaries + size report
+#  Triggers: push/PR to main touching SDK/C++/**
+#
+#  Copyright (c) 2026 Hestia Labs
+# ═══════════════════════════════════════════════════════════════════
+
+name: SDK Build
+
+on:
+    push:
+        branches: [main]
+        paths:
+            - "SDK/C++/**"
+            - ".github/workflows/sdk-build.yml"
+    pull_request:
+        branches: [main]
+        paths:
+            - "SDK/C++/**"
+            - ".github/workflows/sdk-build.yml"
+
+jobs:
+    build:
+        name: Build ${{ matrix.env }}
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                env: [esp32s3, esp32, esp8266]
+                include:
+                    - env: esp32s3
+                      flash_max_pct: 85
+                      ram_max_pct: 50
+                    - env: esp32
+                      flash_max_pct: 85
+                      ram_max_pct: 50
+                    - env: esp8266
+                      flash_max_pct: 85
+                      ram_max_pct: 50
+
+        defaults:
+            run:
+                working-directory: SDK/C++
+
+        steps:
+            # ── Checkout ───────────────────────────────────────────────
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            # ── Cache PlatformIO ───────────────────────────────────────
+            - name: Cache PlatformIO
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cache/pip
+                      ~/.platformio/.cache
+                      ~/.platformio/packages
+                      ~/.platformio/platforms
+                  key: pio-${{ matrix.env }}-${{ hashFiles('SDK/C++/platformio.ini') }}
+                  restore-keys: |
+                      pio-${{ matrix.env }}-
+
+            # ── Install Python + PlatformIO ────────────────────────────
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Install PlatformIO
+              run: |
+                  pip install --upgrade pip
+                  pip install platformio
+
+            # ── Build ──────────────────────────────────────────────────
+            - name: Build firmware (${{ matrix.env }})
+              id: build
+              run: |
+                  set -euo pipefail
+                  pio run -e ${{ matrix.env }} 2>&1 | tee build.log
+
+                  # Extract size line:  RAM:   [=         ]  13.8% (used 45092 bytes from 327680 bytes)
+                  RAM_LINE=$(grep '^RAM:' build.log)
+                  FLASH_LINE=$(grep '^Flash:' build.log)
+
+                  RAM_USED=$(echo "$RAM_LINE" | grep -oP 'used \K[0-9]+')
+                  RAM_TOTAL=$(echo "$RAM_LINE" | grep -oP 'from \K[0-9]+')
+                  RAM_PCT=$(echo "$RAM_LINE" | grep -oP '\]\s+\K[0-9.]+')
+
+                  FLASH_USED=$(echo "$FLASH_LINE" | grep -oP 'used \K[0-9]+')
+                  FLASH_TOTAL=$(echo "$FLASH_LINE" | grep -oP 'from \K[0-9]+')
+                  FLASH_PCT=$(echo "$FLASH_LINE" | grep -oP '\]\s+\K[0-9.]+')
+
+                  echo "ram_used=$RAM_USED" >> "$GITHUB_OUTPUT"
+                  echo "ram_total=$RAM_TOTAL" >> "$GITHUB_OUTPUT"
+                  echo "ram_pct=$RAM_PCT" >> "$GITHUB_OUTPUT"
+                  echo "flash_used=$FLASH_USED" >> "$GITHUB_OUTPUT"
+                  echo "flash_total=$FLASH_TOTAL" >> "$GITHUB_OUTPUT"
+                  echo "flash_pct=$FLASH_PCT" >> "$GITHUB_OUTPUT"
+
+            # ── Size Guardrails ────────────────────────────────────────
+            - name: Check size guardrails
+              env:
+                  FLASH_PCT: ${{ steps.build.outputs.flash_pct }}
+                  RAM_PCT: ${{ steps.build.outputs.ram_pct }}
+                  FLASH_MAX: ${{ matrix.flash_max_pct }}
+                  RAM_MAX: ${{ matrix.ram_max_pct }}
+                  ENV_NAME: ${{ matrix.env }}
+              run: |
+                  echo "═══════════════════════════════════════════════════"
+                  echo "  Size Report: $ENV_NAME"
+                  echo "═══════════════════════════════════════════════════"
+                  echo "  RAM:   ${RAM_PCT}%  (limit: ${RAM_MAX}%)"
+                  echo "  Flash: ${FLASH_PCT}%  (limit: ${FLASH_MAX}%)"
+                  echo "═══════════════════════════════════════════════════"
+
+                  FAIL=0
+
+                  # Compare using awk for float comparison
+                  if echo "$FLASH_PCT $FLASH_MAX" | awk '{exit !($1 > $2)}'; then
+                    echo "::error:: FLASH ${FLASH_PCT}% exceeds limit ${FLASH_MAX}% on $ENV_NAME"
+                    FAIL=1
+                  else
+                    echo "Flash within budget"
+                  fi
+
+                  if echo "$RAM_PCT $RAM_MAX" | awk '{exit !($1 > $2)}'; then
+                    echo "::error::RAM ${RAM_PCT}% exceeds limit ${RAM_MAX}% on $ENV_NAME"
+                    FAIL=1
+                  else
+                    echo " RAM within budget"
+                  fi
+
+                  if [ "$FAIL" -eq 1 ]; then
+                    exit 1
+                  fi
+
+            # ── Size Report (PR Comment data) ─────────────────────────
+            - name: Generate size report
+              if: always()
+              run: |
+                  mkdir -p artifacts
+
+                  cat > artifacts/size-${{ matrix.env }}.json <<EOF
+                  {
+                    "env": "${{ matrix.env }}",
+                    "ram_used": ${{ steps.build.outputs.ram_used }},
+                    "ram_total": ${{ steps.build.outputs.ram_total }},
+                    "ram_pct": ${{ steps.build.outputs.ram_pct }},
+                    "flash_used": ${{ steps.build.outputs.flash_used }},
+                    "flash_total": ${{ steps.build.outputs.flash_total }},
+                    "flash_pct": ${{ steps.build.outputs.flash_pct }},
+                    "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+                    "commit": "${{ github.sha }}"
+                  }
+                  EOF
+
+                  echo "## Size Report — ${{ matrix.env }}" >> artifacts/size-${{ matrix.env }}.md
+                  echo "" >> artifacts/size-${{ matrix.env }}.md
+                  echo "| Metric | Used | Total | % | Limit |" >> artifacts/size-${{ matrix.env }}.md
+                  echo "|--------|------|-------|---|-------|" >> artifacts/size-${{ matrix.env }}.md
+                  echo "| RAM | ${{ steps.build.outputs.ram_used }} B | ${{ steps.build.outputs.ram_total }} B | ${{ steps.build.outputs.ram_pct }}% | ${{ matrix.ram_max_pct }}% |" >> artifacts/size-${{ matrix.env }}.md
+                  echo "| Flash | ${{ steps.build.outputs.flash_used }} B | ${{ steps.build.outputs.flash_total }} B | ${{ steps.build.outputs.flash_pct }}% | ${{ matrix.flash_max_pct }}% |" >> artifacts/size-${{ matrix.env }}.md
+                  echo "" >> artifacts/size-${{ matrix.env }}.md
+                  echo "Commit: \`${{ github.sha }}\`" >> artifacts/size-${{ matrix.env }}.md
+
+            # ── Upload firmware artifact ───────────────────────────────
+            - name: Upload firmware
+              if: success()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: firmware-${{ matrix.env }}
+                  path: SDK/C++/.pio/build/${{ matrix.env }}/firmware.bin
+                  retention-days: 30
+
+            # ── Upload size report ─────────────────────────────────────
+            - name: Upload size report
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: size-report-${{ matrix.env }}
+                  path: SDK/C++/artifacts/
+                  retention-days: 90
+
+    # ── Summary Job ──────────────────────────────────────────────────
+    summary:
+        name: Build Summary
+        needs: build
+        if: always()
+        runs-on: ubuntu-latest
+        steps:
+            - name: Download all size reports
+              uses: actions/download-artifact@v4
+              with:
+                  pattern: size-report-*
+                  merge-multiple: true
+
+            - name: Print summary
+              run: |
+                  echo "# 🔧 HXTP SDK Build Summary" >> "$GITHUB_STEP_SUMMARY"
+                  echo "" >> "$GITHUB_STEP_SUMMARY"
+
+                  for f in size-*.md; do
+                    if [ -f "$f" ]; then
+                      cat "$f" >> "$GITHUB_STEP_SUMMARY"
+                      echo "" >> "$GITHUB_STEP_SUMMARY"
+                    fi
+                  done
+
+                  echo "---" >> "$GITHUB_STEP_SUMMARY"
+                  echo "Workflow: \`${{ github.workflow }}\` | Run: \`${{ github.run_number }}\`" >> "$GITHUB_STEP_SUMMARY"
