@@ -3,43 +3,6 @@
 > HxTP/2.2 protocol implementation for ESP32 and ESP8266 IoT devices.  
 > PlatformIO-native · Arduino framework · Zero dynamic allocation in hot path.
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Application  (app/main.cpp or examples/*)                      │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │  #include <HXTP.h>    ← single public entry point         │  │
-│  │  ┌─────────────────────────────────────────────────────┐  │  │
-│  │  │  HXTPClient  (HXTPClient.h)                         │  │  │
-│  │  │  ┌──────────┐ ┌────────────┐ ┌──────────────────┐  │  │  │
-│  │  │  │  Frame    │ │  Crypto    │ │  Validation      │  │  │  │
-│  │  │  │ Encoder/  │ │ SHA-256    │ │ 7-Step Pipeline  │  │  │  │
-│  │  │  │ Decoder   │ │ HMAC-256   │ │ 1. Version       │  │  │  │
-│  │  │  │          │ │ AES-GCM    │ │ 2. Timestamp     │  │  │  │
-│  │  │  │          │ │ Const-Time │ │ 3. Payload Size  │  │  │  │
-│  │  │  └──────────┘ └────────────┘ │ 4. Nonce         │  │  │  │
-│  │  │  ┌──────────┐ ┌──────────┐   │ 5. Payload Hash  │  │  │  │
-│  │  │  │Capability│ │  JSON    │   │ 6. Sequence      │  │  │  │
-│  │  │  │ Registry │ │ Parser   │   │ 7. HMAC Sig      │  │  │  │
-│  │  │  │ (32 max) │ │ (zero-  │   └──────────────────┘  │  │  │
-│  │  │  │          │ │  alloc)  │                         │  │  │
-│  │  │  └──────────┘ └──────────┘                         │  │  │
-│  │  └─────────────────────────────────────────────────────┘  │  │
-│  │  ┌───────────────────────────────────────────────────┐    │  │
-│  │  │  Platform Layer                                    │    │  │
-│  │  │  ┌───────────────┐ ┌───────────────┐              │    │  │
-│  │  │  │ ESP32          │ │ ESP8266        │              │    │  │
-│  │  │  │ • mbedTLS      │ │ • BearSSL      │              │    │  │
-│  │  │  │ • NVS Storage  │ │ • EEPROM       │              │    │  │
-│  │  │  │ • HW RNG       │ │ • SW RNG       │              │    │  │
-│  │  │  │ • SNTP         │ │ • configTime   │              │    │  │
-│  │  │  │ • WiFiSecure   │ │ • WiFiSecure   │              │    │  │
-│  │  │  └───────────────┘ └───────────────┘              │    │  │
-│  │  └───────────────────────────────────────────────────┘    │  │
-│  └───────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-```
 
 ## Supported Boards
 
@@ -178,8 +141,6 @@ HxtpCapabilityResult my_handler(const char* params, uint32_t len, void* ctx) {
 ```
 SDK/C++/
 ├── platformio.ini               # Build targets: esp32s3, esp32, esp8266
-├── app/
-│   └── main.cpp                 # Default application
 ├── lib/HXTP/
 │   ├── library.json             # PlatformIO library metadata
 │   └── src/
@@ -205,7 +166,7 @@ SDK/C++/
 │   ├── WemosD1Mini/main.cpp     # Wemos D1 Mini sensor
 │   └── GenericWiFi/main.cpp     # Generic WiFi board skeleton
 └── .github/workflows/
-    └── sdk-build.yml            # CI: matrix build + size guardrails
+    └── build.yml            # CI: matrix build + size guardrails
 ```
 
 ## Provisioning Flow
@@ -258,7 +219,7 @@ SDK/C++/
 
 ## CI / Guardrails
 
-The CI pipeline (`.github/workflows/sdk-build.yml`) enforces:
+The CI pipeline (`.github/workflows/build.yml`) enforces:
 
 - **All 3 targets must compile**: esp32s3, esp32, esp8266
 - **Flash ≤ 85%** per target
