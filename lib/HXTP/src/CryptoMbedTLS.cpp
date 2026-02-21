@@ -20,6 +20,7 @@
 #include "mbedtls/sha256.h"
 #include "mbedtls/md.h"
 #include "mbedtls/gcm.h"
+#include "mbedtls/version.h"
 
 namespace hxtp {
 namespace crypto {
@@ -87,7 +88,9 @@ HxtpError sha256(const uint8_t* data, size_t len, uint8_t out[HXTP_SHA256_LEN]) 
     mbedtls_sha256_context ctx;
     mbedtls_sha256_init(&ctx);
 
-    int ret = mbedtls_sha256_starts(&ctx, 0); /* 0 = SHA-256, not SHA-224 */
+#if MBEDTLS_VERSION_NUMBER >= 0x03000000
+    /* mbedTLS 3.x — base functions return int */
+    int ret = mbedtls_sha256_starts(&ctx, 0);
     if (ret != 0) { mbedtls_sha256_free(&ctx); return HxtpError::SHA256_COMPUTE_FAILED; }
 
     ret = mbedtls_sha256_update(&ctx, data, len);
@@ -96,6 +99,14 @@ HxtpError sha256(const uint8_t* data, size_t len, uint8_t out[HXTP_SHA256_LEN]) 
     ret = mbedtls_sha256_finish(&ctx, out);
     mbedtls_sha256_free(&ctx);
     return (ret == 0) ? HxtpError::OK : HxtpError::SHA256_COMPUTE_FAILED;
+#else
+    /* mbedTLS 2.x (ESP-IDF) — these functions return void */
+    mbedtls_sha256_starts(&ctx, 0); /* 0 = SHA-256, not SHA-224 */
+    mbedtls_sha256_update(&ctx, data, len);
+    mbedtls_sha256_finish(&ctx, out);
+    mbedtls_sha256_free(&ctx);
+    return HxtpError::OK;
+#endif
 }
 
 HxtpError sha256_hex(const char* str, size_t str_len, char out_hex[HXTP_SHA256_HEX_LEN + 1]) {

@@ -509,8 +509,7 @@ HxtpError HxtpCore::process_inbound(
     if (ack_len) *ack_len = 0;
 
     /* ── Step A: Frame Decode (binary header) ────────── */
-    HxtpInboundFrame frame;
-    memset(&frame, 0, sizeof(frame));
+    HxtpInboundFrame frame{};
 
     HxtpError err = frame_decode(raw, raw_len, &frame);
     if (err != HxtpError::OK) return err;

@@ -9,7 +9,7 @@
 #  Copyright (c) 2026 Hestia Labs
 # ═══════════════════════════════════════════════════════════════════
 
-name: SDK Build
+name: Build Binaries
 
 on:
     push:
@@ -220,3 +220,95 @@ jobs:
 
                   echo "---" >> "$GITHUB_STEP_SUMMARY"
                   echo "Workflow: \`${{ github.workflow }}\` | Run: \`${{ github.run_number }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+    # ── Release Job ──────────────────────────────────────────────────
+    release:
+        name: Create Release
+        needs: build
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Read version from library.properties
+              id: version
+              run: |
+                  VERSION=$(grep '^version=' library.properties | cut -d= -f2)
+                  echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+                  echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+                  echo "Detected version: $VERSION"
+
+            - name: Download firmware artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  pattern: firmware-*
+                  path: release-bins
+
+            - name: Download size reports
+              uses: actions/download-artifact@v4
+              with:
+                  pattern: size-report-*
+                  path: release-reports
+                  merge-multiple: true
+
+            - name: Prepare release assets
+              id: assets
+              run: |
+                  mkdir -p release-assets
+                  VERSION="${{ steps.version.outputs.version }}"
+
+                  # Rename each firmware binary: hxtp-<board>-v<version>.bin
+                  for dir in release-bins/firmware-*/; do
+                    ENV=$(basename "$dir" | sed 's/firmware-//')
+                    cp "$dir/firmware.bin" "release-assets/hxtp-${ENV}-v${VERSION}.bin"
+                    echo "Packaged: hxtp-${ENV}-v${VERSION}.bin"
+                  done
+
+                  # Include size reports as JSON
+                  for f in release-reports/size-*.json; do
+                    if [ -f "$f" ]; then
+                      cp "$f" release-assets/
+                    fi
+                  done
+
+                  ls -lh release-assets/
+
+            - name: Generate release notes
+              id: notes
+              run: |
+                  VERSION="${{ steps.version.outputs.version }}"
+                  SHA="${{ github.sha }}"
+                  SHORT_SHA="${SHA:0:7}"
+
+                  cat > release-notes.md <<EOF
+                  ## HXTP Embedded SDK v${VERSION}
+
+                  ### Firmware Binaries
+
+                  | Board | File |
+                  |-------|------|
+                  | ESP32-S3 | \`hxtp-esp32s3-v${VERSION}.bin\` |
+                  | ESP32 | \`hxtp-esp32-v${VERSION}.bin\` |
+                  | ESP8266 | \`hxtp-esp8266-v${VERSION}.bin\` |
+
+                  ### Size Reports
+
+                  See attached \`size-*.json\` files for detailed memory usage per board.
+
+                  ---
+                  Commit: [\`${SHORT_SHA}\`](${{ github.server_url }}/${{ github.repository }}/commit/${SHA})
+                  Built by: [CI Run #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+                  EOF
+
+            - name: Create GitHub Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ steps.version.outputs.tag }}
+                  name: HXTP SDK ${{ steps.version.outputs.tag }}
+                  body_path: release-notes.md
+                  files: release-assets/*
+                  fail_on_unmatched_files: true
+                  make_latest: true
