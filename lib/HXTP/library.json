@@ -15,16 +15,16 @@
         "tls"
     ],
     "license": "MIT",
-    "homepage": "https://github.com/hestialab/sdk",
+    "homepage": "https://github.com/hestialabs/hxtp-micro",
     "authors": [
         {
             "name": "Hestia Labs",
-            "url": "https://github.com/hestialab"
+            "url": "https://github.com/hestialabs"
         }
     ],
     "repository": {
         "type": "git",
-        "url": "https://github.com/hestialab/sdk.git"
+        "url": "https://github.com/hestialabs/hxtp-micro.git"
     },
     "frameworks": "arduino",
     "platforms": ["espressif32", "espressif8266"],
@@ -36,7 +36,7 @@
         "flags": ["-std=gnu++17", "-fno-exceptions", "-fno-rtti"]
     },
     "export": {
-        "exclude": ["examples/*", "app/*", "test/*"]
+        "exclude": ["examples/*"]
     },
     "examples": [
         "examples/SingleNode/main.cpp",
