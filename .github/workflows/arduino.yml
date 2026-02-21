@@ -23,23 +23,11 @@ name: Arduino Library Release
 
 on:
     push:
-        branches: [main]
         tags: ["v*"]
-        paths:
-            - "lib/**"
-            - "examples/**"
-            - "library.properties"
-            - "library.json"
-            - "keywords.txt"
-            - ".github/workflows/arduino.yml"
     pull_request:
         branches: [main]
         paths:
-            - "lib/**"
-            - "examples/**"
-            - "library.properties"
-            - "library.json"
-            - "keywords.txt"
+            - "lib/HXTP/**"
             - ".github/workflows/arduino.yml"
 
 jobs:
@@ -78,7 +66,7 @@ jobs:
               run: |
                   TAG="${{ github.ref }}"
                   VERSION="${TAG#refs/tags/v}"
-                  NAME=$(grep '^name=' library.properties | cut -d= -f2)
+                  NAME=$(grep '^name=' lib/HXTP/library.properties | cut -d= -f2)
                   echo "version=$VERSION" >> "$GITHUB_OUTPUT"
                   echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
                   echo "name=$NAME" >> "$GITHUB_OUTPUT"
