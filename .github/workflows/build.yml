@@ -7,7 +7,7 @@
 #  Publishes firmware binaries + size report as artifacts
 #  Triggers: 
 #    - push tags (v*) → build + release
-#    - push to main with changes to lib/**, examples/**, platformio.ini → build only
+#    - push to main → build only
 #
 #  Copyright (c) 2026 Hestia Labs
 # ═══════════════════════════════════════════════════════════════════
@@ -18,18 +18,8 @@ on:
     push:
         branches: [main]
         tags: ["v*"]
-        paths:
-            - "lib/**"
-            - "examples/**"
-            - "platformio.ini"
-            - ".github/workflows/build.yml"
     pull_request:
         branches: [main]
-        paths:
-            - "lib/**"
-            - "examples/**"
-            - "platformio.ini"
-            - ".github/workflows/build.yml"
 
 jobs:
     build:
