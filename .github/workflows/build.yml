@@ -4,7 +4,7 @@
 #  Matrix build: esp32s3, esp32, esp8266
 #  Size guardrails: Flash ≤ 85%, RAM ≤ 50%
 #  Artifact: firmware binaries + size report
-#  Triggers: push/PR to main touching src/**, core/**, etc.
+#  Triggers: push/PR to main touching lib/**, examples/**, platformio.ini
 #
 #  Copyright (c) 2026 Hestia Labs
 # ═══════════════════════════════════════════════════════════════════
@@ -15,25 +15,17 @@ on:
     push:
         branches: [main]
         paths:
-            - "src/**"
-            - "core/**"
             - "lib/**"
-            - "app/**"
-            - "esp32/**"
-            - "esp8266/**"
+            - "examples/**"
             - "platformio.ini"
-            - ".github/workflows/sdk-build.yml"
+            - ".github/workflows/build.yml"
     pull_request:
         branches: [main]
         paths:
-            - "src/**"
-            - "core/**"
             - "lib/**"
-            - "app/**"
-            - "esp32/**"
-            - "esp8266/**"
+            - "examples/**"
             - "platformio.ini"
-            - ".github/workflows/sdk-build.yml"
+            - ".github/workflows/build.yml"
 
 jobs:
     build:
@@ -208,7 +200,7 @@ jobs:
 
             - name: Print summary
               run: |
-                  echo "# 🔧 HXTP SDK Build Summary" >> "$GITHUB_STEP_SUMMARY"
+                  echo "# HXTP SDK Build Summary" >> "$GITHUB_STEP_SUMMARY"
                   echo "" >> "$GITHUB_STEP_SUMMARY"
 
                   for f in size-*.md; do

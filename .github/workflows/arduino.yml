@@ -21,27 +21,19 @@ on:
     push:
         branches: [main]
         paths:
-            - "src/**"
-            - "core/**"
             - "lib/**"
-            - "app/**"
-            - "esp32/**"
-            - "esp8266/**"
             - "examples/**"
             - "library.properties"
+            - "library.json"
             - "keywords.txt"
             - ".github/workflows/arduino-release.yml"
     pull_request:
         branches: [main]
         paths:
-            - "src/**"
-            - "core/**"
             - "lib/**"
-            - "app/**"
-            - "esp32/**"
-            - "esp8266/**"
             - "examples/**"
             - "library.properties"
+            - "library.json"
             - "keywords.txt"
             - ".github/workflows/arduino-release.yml"
 

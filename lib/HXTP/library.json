@@ -28,7 +28,7 @@
     },
     "frameworks": "arduino",
     "platforms": ["espressif32", "espressif8266"],
-    "headers": "HXTP.h",
+    "headers": ["HXTP.h", "hxtp-micro.h"],
     "dependencies": {
         "knolleary/PubSubClient": "^2.8"
     },
