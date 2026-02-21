@@ -1,0 +1,137 @@
+# ═══════════════════════════════════════════════════════════════════
+#  HXTP Embedded SDK — Arduino Library Release Pipeline
+#
+#  • Validates library compliance with arduino-lint on every push/PR
+#  • On push to main: reads version from library.properties,
+#    creates a Git tag + GitHub Release so the Arduino Library
+#    Manager indexer picks it up automatically (checks every hour)
+#
+#  Prerequisites:
+#    1. Register the library once by submitting a PR to
+#       https://github.com/arduino/library-registry adding your
+#       repo URL to repositories.txt
+#    2. After that, every tagged release is auto-indexed
+#
+#  Copyright (c) 2026 Hestia Labs
+# ═══════════════════════════════════════════════════════════════════
+
+name: Arduino Library Release
+
+on:
+    push:
+        branches: [main]
+        paths:
+            - "src/**"
+            - "core/**"
+            - "lib/**"
+            - "app/**"
+            - "esp32/**"
+            - "esp8266/**"
+            - "examples/**"
+            - "library.properties"
+            - "keywords.txt"
+            - ".github/workflows/arduino-release.yml"
+    pull_request:
+        branches: [main]
+        paths:
+            - "src/**"
+            - "core/**"
+            - "lib/**"
+            - "app/**"
+            - "esp32/**"
+            - "esp8266/**"
+            - "examples/**"
+            - "library.properties"
+            - "keywords.txt"
+            - ".github/workflows/arduino-release.yml"
+
+jobs:
+    # ── Lint: Arduino Library Specification compliance ────────────
+    lint:
+        name: Arduino Lint
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Arduino Lint
+              uses: arduino/arduino-lint-action@v2
+              with:
+                  library-manager: update
+                  compliance: strict
+                  project-type: library
+
+    # ── Release: Tag + GitHub Release for Arduino indexer ─────────
+    release:
+        name: Release to Arduino Library Manager
+        needs: lint
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Read version from library.properties
+              id: version
+              run: |
+                  VERSION=$(grep '^version=' library.properties | cut -d= -f2 | tr -d '[:space:]')
+                  NAME=$(grep '^name=' library.properties | cut -d= -f2)
+                  echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+                  echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+                  echo "name=$NAME" >> "$GITHUB_OUTPUT"
+                  echo "Detected: $NAME v$VERSION"
+
+            - name: Check if tag already exists
+              id: check_tag
+              run: |
+                  TAG="${{ steps.version.outputs.tag }}"
+                  if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+                    echo "exists=true" >> "$GITHUB_OUTPUT"
+                    echo "Tag $TAG already exists — skipping release."
+                  else
+                    echo "exists=false" >> "$GITHUB_OUTPUT"
+                    echo "Tag $TAG does not exist — will create release."
+                  fi
+
+            - name: Create Git tag
+              if: steps.check_tag.outputs.exists == 'false'
+              run: |
+                  TAG="${{ steps.version.outputs.tag }}"
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git tag -a "$TAG" -m "Release $TAG"
+                  git push origin "$TAG"
+
+            - name: Create GitHub Release
+              if: steps.check_tag.outputs.exists == 'false'
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ steps.version.outputs.tag }}
+                  name: "${{ steps.version.outputs.name }} ${{ steps.version.outputs.tag }}"
+                  body: |
+                      ## ${{ steps.version.outputs.name }} v${{ steps.version.outputs.version }}
+
+                      Released for the [Arduino Library Manager](https://www.arduino.cc/reference/en/libraries/).
+
+                      The Arduino Library Manager indexer checks for new releases every hour.
+                      This version will be available for installation via **Sketch > Include Library > Manage Libraries...** shortly.
+
+                      ### Install via Arduino CLI
+
+                      ```bash
+                      arduino-cli lib install "${{ steps.version.outputs.name }}"
+                      ```
+
+                      ### Install via PlatformIO
+
+                      ```ini
+                      lib_deps = ${{ steps.version.outputs.name }}
+                      ```
+
+                      ---
+                      Commit: `${{ github.sha }}`
+                  make_latest: true
