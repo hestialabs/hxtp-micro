@@ -26,7 +26,7 @@ platform = espressif32
 board = esp32dev
 framework = arduino
 lib_deps =
-    HXTP
+    hxtp-micro
     knolleary/PubSubClient@^2.8
 build_flags =
     -std=gnu++17
@@ -39,7 +39,7 @@ build_flags =
 #include <HXTP.h>
 ```
 
-That's it — one header gives you everything: `HXTPConfig`, `HXTPClient`, `HxtpError`, all types.
+That's it — one header gives you everything: `HXTPConfig`, `HXTPClient`, `HXTPError`, all types.
 
 ### 3. Configure & Connect
 
@@ -118,24 +118,6 @@ HxtpCapabilityResult my_handler(const char* params, uint32_t len, void* ctx) {
 † 32 capability slots × 48 bytes = ~1.5 KB (16 on ESP8266)  
 ‡ TX buffer (4 KB) + ACK buffer (1 KB / 512 B on ESP8266) + TLS + MQTT  
 
-## Protocol Compliance
-
-| Feature                     | Status |
-| --------------------------- | ------ |
-| HxTP/2.2 version tag        | ✅     |
-| Binary framing (8-byte hdr) | ✅     |
-| HMAC-SHA256 signatures      | ✅     |
-| SHA-256 payload hash         | ✅     |
-| Canonical string (FROZEN)    | ✅     |
-| Nonce replay protection      | ✅     |
-| Sequence monotonicity        | ✅     |
-| Timestamp freshness          | ✅     |
-| Constant-time comparison     | ✅     |
-| Dual-key rotation fallback   | ✅     |
-| AES-256-GCM secret storage   | ✅     |
-| MQTT QoS 1                   | ✅     |
-| TLS 1.2+                     | ✅     |
-| 30s heartbeat interval       | ✅     |
 
 ## File Structure
 
@@ -152,7 +134,7 @@ SDK/C++/
 │       ├── HXTPCrypto.h         # Crypto interface (SHA-256, HMAC, AES-GCM)
 │       ├── CryptoMbedTLS.cpp    # ESP32 crypto implementation (mbedTLS)
 │       ├── CryptoBearSSL.cpp    # ESP8266 crypto implementation (BearSSL)
-│       ├── Frame.h / Frame.cpp  # Binary frame encoder / decoder
+│       ├── Frame.h / Frame.cpp  # Binary frame encoder/decoder
 │       ├── Validation.h / .cpp  # 7-step validation pipeline
 │       ├── Capability.h / .cpp  # Fixed-array capability registry
 │       ├── Core.h / Core.cpp    # Protocol engine, JSON, orchestrator
@@ -191,7 +173,7 @@ SDK/C++/
    → hxtp/{tenant_id}/device/{device_id}/heartbeat
    → Server timeout: 120s
 
-6. Commands arrive on cmd topic
+6. Commands arrive on the cmd topic
    → Frame decode → JSON parse → 7-step validation → capability dispatch
    → ACK on: hxtp/{tenant_id}/device/{device_id}/cmd_ack
 ```
@@ -218,14 +200,7 @@ SDK/C++/
 | `setInsecure()` blocked in RELEASE  | Compile-time `#error` if not DEBUG mode  |
 | No TODOs / placeholders in release  | Enforced by CI scan                      |
 
-## CI / Guardrails
 
-The CI pipeline (`.github/workflows/build.yml`) enforces:
-
-- **All 3 targets must compile**: esp32s3, esp32, esp8266
-- **Flash ≤ 85%** per target
-- **RAM ≤ 50%** per target
-- Matrix build on every push/PR to `main`
 
 ## License
 
