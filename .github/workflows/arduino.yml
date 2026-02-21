@@ -2,9 +2,13 @@
 #  HXTP Embedded SDK — Arduino Library Release Pipeline
 #
 #  • Validates library compliance with arduino-lint on every push/PR
-#  • On push to main: reads version from library.properties,
-#    creates a Git tag + GitHub Release so the Arduino Library
-#    Manager indexer picks it up automatically (checks every hour)
+#  • On tag push (v*): extracts version from tag and creates GitHub Release
+#  • Arduino Library Manager indexer picks up releases automatically (checks every hour)
+#
+#  Usage:
+#    git tag v1.0.0
+#    git push origin v1.0.0
+#    → Triggers lint + creates GitHub Release → Arduino indexer picks it up
 #
 #  Prerequisites:
 #    1. Register the library once by submitting a PR to
@@ -20,13 +24,14 @@ name: Arduino Library Release
 on:
     push:
         branches: [main]
+        tags: ["v*"]
         paths:
             - "lib/**"
             - "examples/**"
             - "library.properties"
             - "library.json"
             - "keywords.txt"
-            - ".github/workflows/arduino-release.yml"
+            - ".github/workflows/arduino.yml"
     pull_request:
         branches: [main]
         paths:
@@ -35,7 +40,7 @@ on:
             - "library.properties"
             - "library.json"
             - "keywords.txt"
-            - ".github/workflows/arduino-release.yml"
+            - ".github/workflows/arduino.yml"
 
 jobs:
     # ── Lint: Arduino Library Specification compliance ────────────
@@ -57,7 +62,7 @@ jobs:
     release:
         name: Release to Arduino Library Manager
         needs: lint
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         runs-on: ubuntu-latest
         permissions:
             contents: write
@@ -67,39 +72,18 @@ jobs:
               with:
                   fetch-depth: 0
 
-            - name: Read version from library.properties
+            - name: Extract version from tag
               id: version
               run: |
-                  VERSION=$(grep '^version=' library.properties | cut -d= -f2 | tr -d '[:space:]')
+                  TAG="${{ github.ref }}"
+                  VERSION="${TAG#refs/tags/v}"
                   NAME=$(grep '^name=' library.properties | cut -d= -f2)
                   echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-                  echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+                  echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
                   echo "name=$NAME" >> "$GITHUB_OUTPUT"
-                  echo "Detected: $NAME v$VERSION"
+                  echo "Detected: $NAME v$VERSION from tag"
 
-            - name: Check if tag already exists
-              id: check_tag
-              run: |
-                  TAG="${{ steps.version.outputs.tag }}"
-                  if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
-                    echo "exists=true" >> "$GITHUB_OUTPUT"
-                    echo "Tag $TAG already exists — skipping release."
-                  else
-                    echo "exists=false" >> "$GITHUB_OUTPUT"
-                    echo "Tag $TAG does not exist — will create release."
-                  fi
-
-            - name: Create Git tag
-              if: steps.check_tag.outputs.exists == 'false'
-              run: |
-                  TAG="${{ steps.version.outputs.tag }}"
-                  git config user.name "github-actions[bot]"
-                  git config user.email "github-actions[bot]@users.noreply.github.com"
-                  git tag -a "$TAG" -m "Release $TAG"
-                  git push origin "$TAG"
-
-            - name: Create GitHub Release
-              if: steps.check_tag.outputs.exists == 'false'
+            - name: Create GitHub Release (triggered by tag push)
               uses: softprops/action-gh-release@v2
               with:
                   tag_name: ${{ steps.version.outputs.tag }}
