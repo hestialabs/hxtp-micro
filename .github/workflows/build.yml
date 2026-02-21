@@ -1,9 +1,10 @@
 # ═══════════════════════════════════════════════════════════════════
-#  HXTP Embedded SDK — CI Pipeline
+#  HXTP Embedded SDK — Example Firmware Build & Test CI
 #
-#  Matrix build: esp32s3, esp32, esp8266
-#  Size guardrails: Flash ≤ 85%, RAM ≤ 50%
-#  Artifact: firmware binaries + size report
+#  Builds example applications for: esp32s3, esp32, esp8266
+#  Verifies SDK library compiles correctly on all supported platforms
+#  Checks memory usage: Flash ≤ 85%, RAM ≤ 50%
+#  Publishes firmware binaries + size report as artifacts
 #  Triggers: push/PR to main touching lib/**, examples/**, platformio.ini
 #
 #  Copyright (c) 2026 Hestia Labs
@@ -76,7 +77,7 @@ jobs:
                   pip install platformio
 
             # ── Build ──────────────────────────────────────────────────
-            - name: Build firmware (${{ matrix.env }})
+            - name: Build example firmware for ${{ matrix.env }}
               id: build
               run: |
                   set -euo pipefail
@@ -200,7 +201,7 @@ jobs:
 
             - name: Print summary
               run: |
-                  echo "# HXTP SDK Build Summary" >> "$GITHUB_STEP_SUMMARY"
+                  echo "# HXTP SDK Example Firmware Build" >> "$GITHUB_STEP_SUMMARY"
                   echo "" >> "$GITHUB_STEP_SUMMARY"
 
                   for f in size-*.md; do
@@ -276,15 +277,21 @@ jobs:
                   SHORT_SHA="${SHA:0:7}"
 
                   cat > release-notes.md <<EOF
-                  ## HXTP Embedded SDK v${VERSION}
+                  ## HXTP Embedded SDK v${VERSION} — Example Firmware Binaries
+
+                  These are **example application firmware binaries** built from the example applications in the SDK.
+                  They verify that the HXTP library compiles and links correctly on:
+                  - ESP32-S3 (Tier-1, primary target)
+                  - ESP32 (Tier-2, generic)
+                  - ESP8266 (Tier-3, constrained)
 
                   ### Firmware Binaries
 
-                  | Board | File |
-                  |-------|------|
-                  | ESP32-S3 | \`hxtp-esp32s3-v${VERSION}.bin\` |
-                  | ESP32 | \`hxtp-esp32-v${VERSION}.bin\` |
-                  | ESP8266 | \`hxtp-esp8266-v${VERSION}.bin\` |
+                  | Board | File | Purpose |
+                  |-------|------|---------|
+                  | ESP32-S3 | \`hxtp-esp32s3-v${VERSION}.bin\` | Fully featured example (full mbedTLS, NVS storage) |
+                  | ESP32 | \`hxtp-esp32-v${VERSION}.bin\` | Full-featured example (full mbedTLS, NVS storage) |
+                  | ESP8266 | \`hxtp-esp8266-v${VERSION}.bin\` | Constrained example (BearSSL, minimal buffers) |
 
                   ### Size Reports
 
@@ -295,11 +302,11 @@ jobs:
                   Built by: [CI Run #${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
                   EOF
 
-            - name: Create GitHub Release
+            - name: Create GitHub Release (Example Firmware + Size Report)
               uses: softprops/action-gh-release@v2
               with:
                   tag_name: ${{ steps.version.outputs.tag }}
-                  name: HXTP SDK ${{ steps.version.outputs.tag }}
+                  name: HXTP ${{ steps.version.outputs.tag }} — Example Firmware
                   body_path: release-notes.md
                   files: release-assets/*
                   fail_on_unmatched_files: true
