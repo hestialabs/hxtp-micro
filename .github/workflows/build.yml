@@ -5,7 +5,9 @@
 #  Verifies SDK library compiles correctly on all supported platforms
 #  Checks memory usage: Flash ≤ 85%, RAM ≤ 50%
 #  Publishes firmware binaries + size report as artifacts
-#  Triggers: push/PR to main touching lib/**, examples/**, platformio.ini
+#  Triggers: 
+#    - push tags (v*) → build + release
+#    - push to main with changes to lib/**, examples/**, platformio.ini → build only
 #
 #  Copyright (c) 2026 Hestia Labs
 # ═══════════════════════════════════════════════════════════════════
@@ -15,6 +17,7 @@ name: Build Binaries
 on:
     push:
         branches: [main]
+        tags: ["v*"]
         paths:
             - "lib/**"
             - "examples/**"
@@ -218,7 +221,7 @@ jobs:
     release:
         name: Create Release
         needs: build
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         runs-on: ubuntu-latest
         permissions:
             contents: write
@@ -226,13 +229,23 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@v4
 
-            - name: Read version from library.properties
+            - name: Extract version from tag or library.properties
               id: version
               run: |
-                  VERSION=$(grep '^version=' library.properties | cut -d= -f2)
-                  echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-                  echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-                  echo "Detected version: $VERSION"
+                  if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+                    # Extract version from tag (v1.0.0 → 1.0.0)
+                    TAG="${{ github.ref }}"
+                    VERSION="${TAG#refs/tags/v}"
+                    echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+                    echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+                    echo "Detected version from tag: v$VERSION"
+                  else
+                    # Fallback: read from library.properties (for branch pushes)
+                    VERSION=$(grep '^version=' library.properties | cut -d= -f2)
+                    echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+                    echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+                    echo "Detected version from library.properties: $VERSION"
+                  fi
 
             - name: Download firmware artifacts
               uses: actions/download-artifact@v4
