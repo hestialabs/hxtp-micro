@@ -4,7 +4,7 @@
 #  Matrix build: esp32s3, esp32, esp8266
 #  Size guardrails: Flash ≤ 85%, RAM ≤ 50%
 #  Artifact: firmware binaries + size report
-#  Triggers: push/PR to main touching SDK/C++/**
+#  Triggers: push/PR to main touching SDK/hxtp-micro/**
 #
 #  Copyright (c) 2026 Hestia Labs
 # ═══════════════════════════════════════════════════════════════════
@@ -15,12 +15,12 @@ on:
     push:
         branches: [main]
         paths:
-            - "SDK/C++/**"
+            - "SDK/hxtp-micro/**"
             - ".github/workflows/sdk-build.yml"
     pull_request:
         branches: [main]
         paths:
-            - "SDK/C++/**"
+            - "SDK/hxtp-micro/**"
             - ".github/workflows/sdk-build.yml"
 
 jobs:
@@ -44,7 +44,7 @@ jobs:
 
         defaults:
             run:
-                working-directory: SDK/C++
+                working-directory: SDK/hxtp-micro
 
         steps:
             # ── Checkout ───────────────────────────────────────────────
@@ -60,7 +60,7 @@ jobs:
                       ~/.platformio/.cache
                       ~/.platformio/packages
                       ~/.platformio/platforms
-                  key: pio-${{ matrix.env }}-${{ hashFiles('SDK/C++/platformio.ini') }}
+                  key: pio-${{ matrix.env }}-${{ hashFiles('SDK/hxtp-micro/platformio.ini') }}
                   restore-keys: |
                       pio-${{ matrix.env }}-
 
@@ -173,7 +173,7 @@ jobs:
               uses: actions/upload-artifact@v4
               with:
                   name: firmware-${{ matrix.env }}
-                  path: SDK/C++/.pio/build/${{ matrix.env }}/firmware.bin
+                  path: SDK/hxtp-micro/.pio/build/${{ matrix.env }}/firmware.bin
                   retention-days: 30
 
             # ── Upload size report ─────────────────────────────────────
@@ -182,7 +182,7 @@ jobs:
               uses: actions/upload-artifact@v4
               with:
                   name: size-report-${{ matrix.env }}
-                  path: SDK/C++/artifacts/
+                  path: SDK/hxtp-micro/artifacts/
                   retention-days: 90
 
     # ── Summary Job ──────────────────────────────────────────────────
