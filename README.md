@@ -4,6 +4,7 @@
 > PlatformIO-native · Arduino framework · Zero dynamic allocation in hot path.
 
 
+
 ## Supported Boards
 
 | Board             | Platform       | Crypto Backend | RAM Usage | Flash Usage |
