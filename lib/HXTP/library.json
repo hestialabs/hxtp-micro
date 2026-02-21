@@ -1,0 +1,48 @@
+{
+    "name": "HXTP",
+    "version": "1.0.0",
+    "description": "HxTP/2.2 protocol SDK for ESP32 and ESP8266 IoT devices. Production-grade HMAC-SHA256 signing, 7-step validation pipeline, binary framing, capability registry, and MQTT transport. Zero dynamic allocation in hot path.",
+    "keywords": [
+        "hxtp",
+        "iot",
+        "mqtt",
+        "esp32",
+        "esp8266",
+        "protocol",
+        "hmac",
+        "embedded",
+        "arduino",
+        "tls"
+    ],
+    "license": "MIT",
+    "homepage": "https://github.com/hestialab/sdk",
+    "authors": [
+        {
+            "name": "Hestia Labs",
+            "url": "https://github.com/hestialab"
+        }
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/hestialab/sdk.git"
+    },
+    "frameworks": "arduino",
+    "platforms": ["espressif32", "espressif8266"],
+    "headers": "HXTP.h",
+    "dependencies": {
+        "knolleary/PubSubClient": "^2.8"
+    },
+    "build": {
+        "flags": ["-std=gnu++17", "-fno-exceptions", "-fno-rtti"]
+    },
+    "export": {
+        "exclude": ["examples/*", "app/*", "test/*"]
+    },
+    "examples": [
+        "examples/SingleNode/main.cpp",
+        "examples/MultiRelay/main.cpp",
+        "examples/ESP8266Node/main.cpp",
+        "examples/WemosD1Mini/main.cpp",
+        "examples/GenericWiFi/main.cpp"
+    ]
+}
