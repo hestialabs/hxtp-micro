@@ -1,57 +1,56 @@
 /*
- * HXTP Micro SDK - Multi-Capability Device Example
+ * HXTP Micro SDK - Multi-Capability Device Example (Zero-Config)
  * 
- * Demonstrates a complex device with multiple capabilities
- * and state reporting to the cloud.
+ * Demonstrates a complex node with:
+ *   1. Zero-config provisioning & Secure Bootstrap.
+ *   2. Multiple independent capability handlers.
+ *   3. Synchronous state feedback to the cloud.
+ * 
+ * Copyright (c) 2026 Hestia Labs
+ * SDK-License-Identifier: MIT
  */
 
 #include <Arduino.h>
-#include <HXTP.h>
+#include "Hxtp.h"
 
-// ---- WiFi Configuration ----
-static const char* WIFI_SSID     = "YOUR_WIFI_SSID";
-static const char* WIFI_PASS     = "YOUR_WIFI_PASSWORD";
+// ---- Global HXTP Client ----
+hxtp::Client* hxtpClient = nullptr;
 
-// ---- HxTP Provisioning Payload ----
-static const char* API_BASE_URL  = "https://api.hestialabs.com/api/v1";
-static const char* DEVICE_ID     = "d123456789abcdef0123456789abcdef";
-static const char* TENANT_ID     = "t-987654321";
-static const char* DEVICE_SECRET = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
-
-hxtp::HXTPClient* hxtpClient = nullptr;
-
-// Internal State
+// Internal System State
 bool systemEnabled = true;
 
-// Capability: Reset System (ID: 10)
-HxtpCapabilityResult handleReset(const char*, uint32_t, void*) {
-    HxtpCapabilityResult result{};
-    Serial.println("[System] Rebooting system in 2 seconds...");
-    // Mock sleep/reboot
+// Capability 1: System Reset (ID: 10)
+CapabilityResult handleReset(const char* params, uint32_t len, void* user_ctx) {
+    CapabilityResult result{};
+    Serial.println("[System] Remote reset triggered. Restarting hardware...");
+    
+    // In a real device, you'd trigger a timer or bit to restart after ACK is sent
     result.success = true;
     return result;
 }
 
-// Capability: Enable/Disable (ID: 11)
-HxtpCapabilityResult handleSetMode(const char* params, uint32_t len, void*) {
-    HxtpCapabilityResult result{};
+// Capability 2: Configure Mode (ID: 11)
+CapabilityResult handleSetMode(const char* params, uint32_t len, void* user_ctx) {
+    CapabilityResult result{};
     
-    int64_t mode = 0;
-    if (!hxtp::json_get_int64(params, len, "enabled", &mode)) {
+    int64_t enable = 0;
+    if (!hxtp::json_get_int64(params, len, "enabled", &enable)) {
         result.success = false;
-        result.error_code = static_cast<int16_t>(HxtpError::INVALID_PARAMS);
-        snprintf(result.error_msg, sizeof(result.error_msg), "Missing 'enabled' param");
+        result.error_code = 400;
+        snprintf(result.error_msg, sizeof(result.error_msg), "Missing 'enabled' boolean");
         return result;
     }
     
-    systemEnabled = (mode != 0);
-    Serial.printf("[System] Mode changed to: %s\n", systemEnabled ? "ENABLED" : "DISABLED");
+    systemEnabled = (enable != 0);
+    Serial.printf("[System] Mode set to: %s\n", systemEnabled ? "ACTIVE" : "STANDBY");
     
-    // Publish new state directly back to the cloud after change
-    if (hxtpClient && hxtpClient->isConnected()) {
-        char statePayload[64];
-        snprintf(statePayload, sizeof(statePayload), "{\"enabled\":%s}", systemEnabled ? "true" : "false");
-        hxtpClient->publishState(statePayload, strlen(statePayload));
+    // ── Synchronous Feedback ──────────────────────────────────────────
+    // Report the new state back to the cloud immediately so the dashboard
+    // reflects the change without waiting for the next heartbeat.
+    if (hxtpClient && hxtpClient->state() == hxtp::ClientState::READY) {
+        char stateBuf[64];
+        snprintf(stateBuf, sizeof(stateBuf), "{\"enabled\":%s}", systemEnabled ? "true" : "false");
+        hxtpClient->publishState(stateBuf, strlen(stateBuf));
     }
     
     result.success = true;
@@ -60,25 +59,26 @@ HxtpCapabilityResult handleSetMode(const char* params, uint32_t len, void*) {
 
 void setup() {
     Serial.begin(115200);
+    delay(1000);
+    Serial.println("\n--- HxTP Multi-Capability Hub Starting ---");
 
-    HXTPConfig config;
-    config.wifi_ssid        = WIFI_SSID;
-    config.wifi_password    = WIFI_PASS;
-    config.api_base_url     = API_BASE_URL;
-    config.device_id        = DEVICE_ID;
-    config.tenant_id        = TENANT_ID;
-    config.device_secret    = DEVICE_SECRET;
+    // 1. Configure the HXTP Client
+    Config config;
     config.device_type      = "advanced-hub";
-    config.firmware_version = "1.0.0";
-    config.verify_server    = false; 
+    config.firmware_version = "2.0.0";
+    config.verify_server    = true; 
 
-    hxtpClient = new hxtp::HXTPClient(config);
-    hxtpClient->begin();
+    // 2. Initialize the Client
+    hxtpClient = new hxtp::Client(config);
 
-    // Register Multiple Capabilities
-    hxtpClient->registerCapability(10, "system_reset", handleReset);
+    // 3. Register Multiple Capabilities
+    // These IDs should match the "Capabilities" defined in the Cloud Console
+    hxtpClient->registerCapability(10, "reset",   handleReset);
     hxtpClient->registerCapability(11, "set_mode", handleSetMode);
 
+    hxtpClient->begin();
+
+    // 4. Start Lifecycle
     hxtpClient->connect();
 }
 

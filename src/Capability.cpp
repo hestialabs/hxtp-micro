@@ -25,7 +25,7 @@ bool CapabilityRegistry::register_capability(
     void* user_ctx)
 {
     if (!action || !handler) return false;
-    if (count_ >= HXTP_MAX_CAPABILITIES) return false;
+    if (count_ >= MaxCapabilities) return false;
 
     /* Check for duplicate ID or action */
     for (size_t i = 0; i < count_; ++i) {
@@ -35,7 +35,7 @@ bool CapabilityRegistry::register_capability(
         }
     }
 
-    HxtpCapabilityEntry& e = entries_[count_];
+    CapabilityEntry& e = entries_[count_];
     e.id = id;
 
     size_t alen = strlen(action);
@@ -51,52 +51,52 @@ bool CapabilityRegistry::register_capability(
     return true;
 }
 
-HxtpError CapabilityRegistry::lookup_by_action(
+Error CapabilityRegistry::lookup_by_action(
     const char* action,
-    const HxtpCapabilityEntry** out_entry) const
+    const CapabilityEntry** out_entry) const
 {
-    if (!action || !out_entry) return HxtpError::INVALID_PARAMS;
+    if (!action || !out_entry) return Error::INVALID_PARAMS;
 
     for (size_t i = 0; i < count_; ++i) {
         if (entries_[i].active && strcmp(entries_[i].action, action) == 0) {
             *out_entry = &entries_[i];
-            return HxtpError::OK;
+            return Error::OK;
         }
     }
 
-    return HxtpError::CAPABILITY_NOT_REGISTERED;
+    return Error::CAPABILITY_NOT_REGISTERED;
 }
 
-HxtpError CapabilityRegistry::lookup_by_id(
+Error CapabilityRegistry::lookup_by_id(
     uint16_t id,
-    const HxtpCapabilityEntry** out_entry) const
+    const CapabilityEntry** out_entry) const
 {
-    if (!out_entry) return HxtpError::INVALID_PARAMS;
+    if (!out_entry) return Error::INVALID_PARAMS;
 
     for (size_t i = 0; i < count_; ++i) {
         if (entries_[i].active && entries_[i].id == id) {
             *out_entry = &entries_[i];
-            return HxtpError::OK;
+            return Error::OK;
         }
     }
 
-    return HxtpError::CAPABILITY_NOT_REGISTERED;
+    return Error::CAPABILITY_NOT_REGISTERED;
 }
 
-HxtpCapabilityResult CapabilityRegistry::execute(
+CapabilityResult CapabilityRegistry::execute(
     const char* action,
     const char* params_json,
     uint32_t params_len) const
 {
-    HxtpCapabilityResult result;
+    CapabilityResult result;
     memset(&result, 0, sizeof(result));
 
-    const HxtpCapabilityEntry* entry = nullptr;
-    HxtpError err = lookup_by_action(action, &entry);
+    const CapabilityEntry* entry = nullptr;
+    Error err = lookup_by_action(action, &entry);
 
-    if (err != HxtpError::OK || !entry || !entry->handler) {
+    if (err != Error::OK || !entry || !entry->handler) {
         result.success    = false;
-        result.error_code = static_cast<int16_t>(HxtpError::CAPABILITY_NOT_REGISTERED);
+        result.error_code = static_cast<int16_t>(Error::CAPABILITY_NOT_REGISTERED);
         const char* msg   = "CAPABILITY_NOT_REGISTERED";
         size_t mlen = strlen(msg);
         if (mlen >= sizeof(result.error_msg)) mlen = sizeof(result.error_msg) - 1;

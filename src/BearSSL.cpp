@@ -16,7 +16,7 @@
 
 #ifdef ESP8266
 
-#include "HXTPCrypto.h"
+#include "Crypto.h"
 #include "Config.h"
 #include <cstring>
 
@@ -91,29 +91,29 @@ bool base64_encode(const uint8_t* in, size_t in_len, char* out, size_t out_cap, 
 
 /* ── SHA-256 (via ESP8266 Crypto.h → BearSSL) ──────────────────────── */
 
-HxtpError sha256(const uint8_t* data, size_t len, uint8_t out[HXTP_SHA256_LEN]) {
+Error sha256(const uint8_t* data, size_t len, uint8_t out[Sha256Len]) {
     /*
      * experimental::crypto::SHA256::hash(data, dataLength, resultArray)
      * Returns pointer to resultArray on success.
      */
     void* result = experimental::crypto::SHA256::hash(data, len, out);
-    return result ? HxtpError::OK : HxtpError::SHA256_COMPUTE_FAILED;
+    return result ? Error::OK : Error::SHA256_COMPUTE_FAILED;
 }
 
-HxtpError sha256_hex(const char* str, size_t str_len, char out_hex[HXTP_SHA256_HEX_LEN + 1]) {
-    uint8_t hash[HXTP_SHA256_LEN];
-    HxtpError err = sha256(reinterpret_cast<const uint8_t*>(str), str_len, hash);
-    if (err != HxtpError::OK) return err;
-    hex_encode(hash, HXTP_SHA256_LEN, out_hex);
-    return HxtpError::OK;
+Error sha256_hex(const char* str, size_t str_len, char out_hex[Sha256HexLen + 1]) {
+    uint8_t hash[Sha256Len];
+    Error err = sha256(reinterpret_cast<const uint8_t*>(str), str_len, hash);
+    if (err != Error::OK) return err;
+    hex_encode(hash, Sha256Len, out_hex);
+    return Error::OK;
 }
 
 /* ── HMAC-SHA256 (via ESP8266 Crypto.h → BearSSL) ──────────────────── */
 
-HxtpError hmac_sha256(
+Error hmac_sha256(
     const uint8_t* key, size_t key_len,
     const uint8_t* data, size_t data_len,
-    uint8_t out[HXTP_HMAC_LEN]
+    uint8_t out[HmacLen]
 ) {
     /*
      * experimental::crypto::SHA256::hmac(data, dataLength, hashKey, hashKeyLength,
@@ -125,21 +125,21 @@ HxtpError hmac_sha256(
         key, key_len,
         out, 0  /* 0 = full NATURAL_LENGTH = 32 bytes */
     );
-    return result ? HxtpError::OK : HxtpError::HMAC_COMPUTE_FAILED;
+    return result ? Error::OK : Error::HMAC_COMPUTE_FAILED;
 }
 
-HxtpError hmac_sha256_hex(
+Error hmac_sha256_hex(
     const uint8_t* key, size_t key_len,
     const char* data, size_t data_len,
-    char out_hex[HXTP_HMAC_HEX_LEN + 1]
+    char out_hex[HmacHexLen + 1]
 ) {
-    uint8_t mac[HXTP_HMAC_LEN];
-    HxtpError err = hmac_sha256(key, key_len,
+    uint8_t mac[HmacLen];
+    Error err = hmac_sha256(key, key_len,
                                  reinterpret_cast<const uint8_t*>(data), data_len,
                                  mac);
-    if (err != HxtpError::OK) return err;
-    hex_encode(mac, HXTP_HMAC_LEN, out_hex);
-    return HxtpError::OK;
+    if (err != Error::OK) return err;
+    hex_encode(mac, HmacLen, out_hex);
+    return Error::OK;
 }
 
 /* ── Constant-Time Compare ──────────────────────────────────────────── */
@@ -169,28 +169,28 @@ bool constant_time_hex_equal(const char* a, const char* b, size_t len) {
 
 #if HXTP_FEATURE_AES_GCM
 
-HxtpError aes256_gcm_decrypt(
-    const uint8_t key[HXTP_AES_KEY_LEN],
+Error aes256_gcm_decrypt(
+    const uint8_t key[AesKeyLen],
     const uint8_t* input, size_t input_len,
     uint8_t* output, size_t* output_len
 ) {
     /* Format: IV[12] + CIPHERTEXT[n] + TAG[16] */
-    const size_t overhead = HXTP_AES_GCM_IV_LEN + HXTP_AES_GCM_TAG_LEN;
-    if (input_len < overhead) return HxtpError::AES_DECRYPT_FAILED;
+    const size_t overhead = AesGcmIvLen + AesGcmTagLen;
+    if (input_len < overhead) return Error::AES_DECRYPT_FAILED;
 
     const uint8_t* iv   = input;
     size_t ct_len       = input_len - overhead;
-    const uint8_t* ct   = input + HXTP_AES_GCM_IV_LEN;
-    const uint8_t* tag  = input + HXTP_AES_GCM_IV_LEN + ct_len;
+    const uint8_t* ct   = input + AesGcmIvLen;
+    const uint8_t* tag  = input + AesGcmIvLen + ct_len;
 
     /* BearSSL AES-256-GCM via constant-time AES engine */
     br_aes_ct_ctr_keys aes_ctx;
-    br_aes_ct_ctr_init(&aes_ctx, key, HXTP_AES_KEY_LEN);
+    br_aes_ct_ctr_init(&aes_ctx, key, AesKeyLen);
 
     br_gcm_context gcm;
     br_gcm_init(&gcm, &aes_ctx.vtable, br_ghash_ctmul32);
 
-    br_gcm_reset(&gcm, iv, HXTP_AES_GCM_IV_LEN);
+    br_gcm_reset(&gcm, iv, AesGcmIvLen);
     /* No AAD */
     br_gcm_flip(&gcm);
 
@@ -201,69 +201,69 @@ HxtpError aes256_gcm_decrypt(
     /* Verify tag */
     if (!br_gcm_check_tag(&gcm, tag)) {
         memset(output, 0, ct_len); /* Clear on failure */
-        return HxtpError::AES_DECRYPT_FAILED;
+        return Error::AES_DECRYPT_FAILED;
     }
 
     *output_len = ct_len;
-    return HxtpError::OK;
+    return Error::OK;
 }
 
-HxtpError aes256_gcm_encrypt(
-    const uint8_t key[HXTP_AES_KEY_LEN],
+Error aes256_gcm_encrypt(
+    const uint8_t key[AesKeyLen],
     const uint8_t* plaintext, size_t pt_len,
     uint8_t* output, size_t* output_len,
     bool (*rng)(uint8_t*, size_t)
 ) {
     /* Output: IV[12] + CIPHERTEXT[pt_len] + TAG[16] */
-    uint8_t iv[HXTP_AES_GCM_IV_LEN];
-    if (!rng(iv, HXTP_AES_GCM_IV_LEN)) return HxtpError::RNG_FAILED;
+    uint8_t iv[AesGcmIvLen];
+    if (!rng(iv, AesGcmIvLen)) return Error::RNG_FAILED;
 
     br_aes_ct_ctr_keys aes_ctx;
-    br_aes_ct_ctr_init(&aes_ctx, key, HXTP_AES_KEY_LEN);
+    br_aes_ct_ctr_init(&aes_ctx, key, AesKeyLen);
 
     br_gcm_context gcm;
     br_gcm_init(&gcm, &aes_ctx.vtable, br_ghash_ctmul32);
 
-    br_gcm_reset(&gcm, iv, HXTP_AES_GCM_IV_LEN);
+    br_gcm_reset(&gcm, iv, AesGcmIvLen);
     /* No AAD */
     br_gcm_flip(&gcm);
 
     /* Encrypt: copy plaintext to output + IV offset, encrypt in-place */
-    uint8_t* ct_out = output + HXTP_AES_GCM_IV_LEN;
+    uint8_t* ct_out = output + AesGcmIvLen;
     memcpy(ct_out, plaintext, pt_len);
     br_gcm_run(&gcm, 1 /* encrypt */, ct_out, pt_len);
 
     /* Get tag */
-    uint8_t tag[HXTP_AES_GCM_TAG_LEN];
+    uint8_t tag[AesGcmTagLen];
     br_gcm_get_tag(&gcm, tag);
 
     /* Write IV at beginning */
-    memcpy(output, iv, HXTP_AES_GCM_IV_LEN);
+    memcpy(output, iv, AesGcmIvLen);
     /* Write tag at end */
-    memcpy(output + HXTP_AES_GCM_IV_LEN + pt_len, tag, HXTP_AES_GCM_TAG_LEN);
+    memcpy(output + AesGcmIvLen + pt_len, tag, AesGcmTagLen);
 
-    *output_len = HXTP_AES_GCM_IV_LEN + pt_len + HXTP_AES_GCM_TAG_LEN;
-    return HxtpError::OK;
+    *output_len = AesGcmIvLen + pt_len + AesGcmTagLen;
+    return Error::OK;
 }
 
 #endif /* HXTP_FEATURE_AES_GCM */
 
 /* ── Nonce Generation ───────────────────────────────────────────────── */
 
-HxtpError generate_nonce(char* out, size_t* out_len, bool (*rng)(uint8_t*, size_t)) {
-    uint8_t raw[HXTP_NONCE_RAW_MIN];
-    if (!rng(raw, HXTP_NONCE_RAW_MIN)) return HxtpError::RNG_FAILED;
-    if (!base64_encode(raw, HXTP_NONCE_RAW_MIN, out, HXTP_MAX_NONCE_LEN + 1, out_len)) {
-        return HxtpError::RNG_FAILED;
+Error generate_nonce(char* out, size_t* out_len, bool (*rng)(uint8_t*, size_t)) {
+    uint8_t raw[NonceRawMin];
+    if (!rng(raw, NonceRawMin)) return Error::RNG_FAILED;
+    if (!base64_encode(raw, NonceRawMin, out, MaxNonceLen + 1, out_len)) {
+        return Error::RNG_FAILED;
     }
-    return HxtpError::OK;
+    return Error::OK;
 }
 
 /* ── UUID v4 Generation ─────────────────────────────────────────────── */
 
-HxtpError generate_uuid_v4(char out[37], bool (*rng)(uint8_t*, size_t)) {
+Error generate_uuid_v4(char out[37], bool (*rng)(uint8_t*, size_t)) {
     uint8_t raw[16];
-    if (!rng(raw, 16)) return HxtpError::RNG_FAILED;
+    if (!rng(raw, 16)) return Error::RNG_FAILED;
 
     /* Set version 4 */
     raw[6] = (raw[6] & 0x0F) | 0x40;
@@ -283,7 +283,7 @@ HxtpError generate_uuid_v4(char out[37], bool (*rng)(uint8_t*, size_t)) {
         }
     }
     out[oi] = '\0';
-    return HxtpError::OK;
+    return Error::OK;
 }
 
 } /* namespace crypto */

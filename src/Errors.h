@@ -9,14 +9,14 @@
  * SDK-License-Identifier: MIT
  */
 
-#ifndef HXTP_ERRORS_H
-#define HXTP_ERRORS_H
+#ifndef ERRORS_H
+#define ERRORS_H
 
 #include <cstdint>
 
 /* ── Protocol Error Codes (match server ProtocolError enum) ─────────── */
 
-enum class HxtpError : uint16_t {
+enum class Error : uint16_t {
     /* Success */
     OK                          = 0,
 
@@ -80,54 +80,54 @@ enum class HxtpError : uint16_t {
 
 /* ── Error code to string (for logging / debug) ─────────────────────── */
 
-inline const char* hxtp_error_str(HxtpError e) {
+inline const char* error_str(Error e) {
     switch (e) {
-        case HxtpError::OK:                         return "OK";
-        case HxtpError::VERSION_MISMATCH:           return "VERSION_MISMATCH";
-        case HxtpError::TIMESTAMP_EXPIRED:          return "TIMESTAMP_EXPIRED";
-        case HxtpError::NONCE_REUSED:               return "NONCE_REUSED";
-        case HxtpError::HASH_MISMATCH:              return "HASH_MISMATCH";
-        case HxtpError::SIGNATURE_INVALID:          return "SIGNATURE_INVALID";
-        case HxtpError::SEQUENCE_VIOLATION:          return "SEQUENCE_VIOLATION";
-        case HxtpError::PAYLOAD_TOO_LARGE:          return "PAYLOAD_TOO_LARGE";
-        case HxtpError::DEVICE_NOT_FOUND:           return "DEVICE_NOT_FOUND";
-        case HxtpError::DEVICE_OFFLINE:             return "DEVICE_OFFLINE";
-        case HxtpError::DEVICE_QUARANTINED:         return "DEVICE_QUARANTINED";
-        case HxtpError::UNKNOWN_ACTION:             return "UNKNOWN_ACTION";
-        case HxtpError::PERMISSION_DENIED:          return "PERMISSION_DENIED";
-        case HxtpError::INVALID_PARAMS:             return "INVALID_PARAMS";
-        case HxtpError::CAPABILITY_NOT_REGISTERED:  return "CAPABILITY_NOT_REGISTERED";
-        case HxtpError::BROKER_CONNECT_FAILED:      return "Broker connect failed";
-        case HxtpError::BROKER_PUBLISH_FAILED:      return "MQTT_PUBLISH_FAILED";
-        case HxtpError::BROKER_SUBSCRIBE_FAILED:    return "MQTT_SUBSCRIBE_FAILED";
-        case HxtpError::TLS_HANDSHAKE_FAILED:       return "TLS_HANDSHAKE_FAILED";
-        case HxtpError::WIFI_CONNECT_FAILED:        return "WiFi connect failed";
-        case HxtpError::TIME_SYNC_FAILED:           return "Time sync failed";
-        case HxtpError::BOOTSTRAP_FAILED:           return "Bootstrap failed";
-        case HxtpError::CRYPTO_INIT_FAILED:         return "CRYPTO_INIT_FAILED";
-        case HxtpError::HMAC_COMPUTE_FAILED:        return "HMAC_COMPUTE_FAILED";
-        case HxtpError::SHA256_COMPUTE_FAILED:      return "SHA256_COMPUTE_FAILED";
-        case HxtpError::AES_DECRYPT_FAILED:         return "AES_DECRYPT_FAILED";
-        case HxtpError::RNG_FAILED:                 return "RNG_FAILED";
-        case HxtpError::SECRET_NOT_FOUND:           return "SECRET_NOT_FOUND";
-        case HxtpError::SECRET_CORRUPT:             return "SECRET_CORRUPT";
-        case HxtpError::FRAME_TOO_SHORT:            return "FRAME_TOO_SHORT";
-        case HxtpError::FRAME_MAGIC_INVALID:        return "FRAME_MAGIC_INVALID";
-        case HxtpError::FRAME_VERSION_INVALID:      return "FRAME_VERSION_INVALID";
-        case HxtpError::FRAME_TYPE_INVALID:         return "FRAME_TYPE_INVALID";
-        case HxtpError::FRAME_LENGTH_INVALID:       return "FRAME_LENGTH_INVALID";
-        case HxtpError::FRAME_UTF8_INVALID:         return "FRAME_UTF8_INVALID";
-        case HxtpError::FRAME_JSON_INVALID:         return "FRAME_JSON_INVALID";
-        case HxtpError::FRAME_SCHEMA_INVALID:       return "FRAME_SCHEMA_INVALID";
-        case HxtpError::STORAGE_INIT_FAILED:        return "STORAGE_INIT_FAILED";
-        case HxtpError::STORAGE_READ_FAILED:        return "STORAGE_READ_FAILED";
-        case HxtpError::STORAGE_WRITE_FAILED:       return "STORAGE_WRITE_FAILED";
-        case HxtpError::INTERNAL_ERROR:             return "INTERNAL_ERROR";
-        case HxtpError::NOT_INITIALIZED:            return "NOT_INITIALIZED";
-        case HxtpError::PROTOCOL_NOT_READY:         return "PROTOCOL_NOT_READY";
-        case HxtpError::BUFFER_OVERFLOW:            return "BUFFER_OVERFLOW";
+        case Error::OK:                         return "OK";
+        case Error::VERSION_MISMATCH:           return "VERSION_MISMATCH";
+        case Error::TIMESTAMP_EXPIRED:          return "TIMESTAMP_EXPIRED";
+        case Error::NONCE_REUSED:               return "NONCE_REUSED";
+        case Error::HASH_MISMATCH:              return "HASH_MISMATCH";
+        case Error::SIGNATURE_INVALID:          return "SIGNATURE_INVALID";
+        case Error::SEQUENCE_VIOLATION:          return "SEQUENCE_VIOLATION";
+        case Error::PAYLOAD_TOO_LARGE:          return "PAYLOAD_TOO_LARGE";
+        case Error::DEVICE_NOT_FOUND:           return "DEVICE_NOT_FOUND";
+        case Error::DEVICE_OFFLINE:             return "DEVICE_OFFLINE";
+        case Error::DEVICE_QUARANTINED:         return "DEVICE_QUARANTINED";
+        case Error::UNKNOWN_ACTION:             return "UNKNOWN_ACTION";
+        case Error::PERMISSION_DENIED:          return "PERMISSION_DENIED";
+        case Error::INVALID_PARAMS:             return "INVALID_PARAMS";
+        case Error::CAPABILITY_NOT_REGISTERED:  return "CAPABILITY_NOT_REGISTERED";
+        case Error::BROKER_CONNECT_FAILED:      return "Broker connect failed";
+        case Error::BROKER_PUBLISH_FAILED:      return "MQTT_PUBLISH_FAILED";
+        case Error::BROKER_SUBSCRIBE_FAILED:    return "MQTT_SUBSCRIBE_FAILED";
+        case Error::TLS_HANDSHAKE_FAILED:       return "TLS_HANDSHAKE_FAILED";
+        case Error::WIFI_CONNECT_FAILED:        return "WiFi connect failed";
+        case Error::TIME_SYNC_FAILED:           return "Time sync failed";
+        case Error::BOOTSTRAP_FAILED:           return "Bootstrap failed";
+        case Error::CRYPTO_INIT_FAILED:         return "CRYPTO_INIT_FAILED";
+        case Error::HMAC_COMPUTE_FAILED:        return "HMAC_COMPUTE_FAILED";
+        case Error::SHA256_COMPUTE_FAILED:      return "SHA256_COMPUTE_FAILED";
+        case Error::AES_DECRYPT_FAILED:         return "AES_DECRYPT_FAILED";
+        case Error::RNG_FAILED:                 return "RNG_FAILED";
+        case Error::SECRET_NOT_FOUND:           return "SECRET_NOT_FOUND";
+        case Error::SECRET_CORRUPT:             return "SECRET_CORRUPT";
+        case Error::FRAME_TOO_SHORT:            return "FRAME_TOO_SHORT";
+        case Error::FRAME_MAGIC_INVALID:        return "FRAME_MAGIC_INVALID";
+        case Error::FRAME_VERSION_INVALID:      return "FRAME_VERSION_INVALID";
+        case Error::FRAME_TYPE_INVALID:         return "FRAME_TYPE_INVALID";
+        case Error::FRAME_LENGTH_INVALID:       return "FRAME_LENGTH_INVALID";
+        case Error::FRAME_UTF8_INVALID:         return "FRAME_UTF8_INVALID";
+        case Error::FRAME_JSON_INVALID:         return "FRAME_JSON_INVALID";
+        case Error::FRAME_SCHEMA_INVALID:       return "FRAME_SCHEMA_INVALID";
+        case Error::STORAGE_INIT_FAILED:        return "STORAGE_INIT_FAILED";
+        case Error::STORAGE_READ_FAILED:        return "STORAGE_READ_FAILED";
+        case Error::STORAGE_WRITE_FAILED:       return "STORAGE_WRITE_FAILED";
+        case Error::INTERNAL_ERROR:             return "INTERNAL_ERROR";
+        case Error::NOT_INITIALIZED:            return "NOT_INITIALIZED";
+        case Error::PROTOCOL_NOT_READY:         return "PROTOCOL_NOT_READY";
+        case Error::BUFFER_OVERFLOW:            return "BUFFER_OVERFLOW";
         default:                                     return "UNKNOWN_ERROR";
     }
 }
 
-#endif /* HXTP_ERRORS_H */
+#endif /* ERRORS_H */

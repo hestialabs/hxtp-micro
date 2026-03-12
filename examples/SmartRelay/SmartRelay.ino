@@ -1,47 +1,52 @@
 /*
- * HXTP Micro SDK - Smart Relay Example
+ * HXTP Micro SDK - Smart Relay Example (Zero-Config)
  * 
- * Demonstrates registering a capability handler to control
- * a physical GPIO pin based on cloud commands.
+ * Demonstrates:
+ *   1. Zero-config provisioning flow.
+ *   2. Registering a capability handler to toggle a GPIO pin.
+ *   3. Strict TLS verification enabled.
+ * 
+ * Copyright (c) 2026 Hestia Labs
+ * SDK-License-Identifier: MIT
  */
 
 #include <Arduino.h>
-#include <HXTP.h>
+#include "Hxtp.h"
 
 // ---- Hardware Config ----
-static const int RELAY_PIN       = 2; // e.g. GPIO2 on ESP32
+static const int RELAY_PIN = 2; // GPIO2 on ESP32
 
-// ---- WiFi Configuration ----
-static const char* WIFI_SSID     = "YOUR_WIFI_SSID";
-static const char* WIFI_PASS     = "YOUR_WIFI_PASSWORD";
-
-// ---- HxTP Provisioning Payload ----
-static const char* API_BASE_URL  = "https://api.hestialabs.com/api/v1";
-static const char* DEVICE_ID     = "d123456789abcdef0123456789abcdef";
-static const char* TENANT_ID     = "t-987654321";
-static const char* DEVICE_SECRET = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
-
-hxtp::HXTPClient* hxtpClient = nullptr;
+// ---- Global HXTP Client ----
+hxtp::Client* hxtpClient = nullptr;
 
 // ---- Capability Handler ----
-HxtpCapabilityResult handleToggleRelay(const char* params, uint32_t len, void*) {
-    HxtpCapabilityResult result{};
+// This function runs when the cloud sends a 'toggle' command to capability ID 1
+CapabilityResult handleToggleRelay(const char* params, uint32_t len, void* user_ctx) {
+    CapabilityResult result{};
     
-    int64_t state = 0;
-    // Extract the "state" parameter from the JSON command payload
-    if (!hxtp::json_get_int64(params, len, "state", &state)) {
+    int64_t target_state = 0;
+    // json_get_int64 is a zero-allocation helper provided by the SDK
+    if (!hxtp::json_get_int64(params, len, "state", &target_state)) {
         result.success = false;
-        result.error_code = static_cast<int16_t>(HxtpError::INVALID_PARAMS);
-        snprintf(result.error_msg, sizeof(result.error_msg), "Missing 'state' param");
+        result.error_code = 400; // Bad Request
+        snprintf(result.error_msg, sizeof(result.error_msg), "Missing 'state' parameter");
         return result;
     }
     
-    // Apply state to GPIO
-    digitalWrite(RELAY_PIN, state ? HIGH : LOW);
-    Serial.printf("[Relay] State changed to: %s\n", state ? "ON" : "OFF");
+    // Apply state to hardware
+    digitalWrite(RELAY_PIN, target_state ? HIGH : LOW);
+    Serial.printf("[Relay] Power turned %s\n", target_state ? "ON" : "OFF");
+    
+    // In a real device, you would publish a 'state' message back to the cloud here
+    // to confirm the action succeeded and update the dashboard UI.
     
     result.success = true;
     return result;
+}
+
+// ---- SDK Event Callbacks ----
+void onHxtpStateChange(hxtp::ClientState oldState, hxtp::ClientState newState, void*) {
+    Serial.printf("[HXTP] State: %s\n", hxtpClient->stateStr());
 }
 
 void setup() {
@@ -49,23 +54,23 @@ void setup() {
     pinMode(RELAY_PIN, OUTPUT);
     digitalWrite(RELAY_PIN, LOW);
 
-    HXTPConfig config;
-    config.wifi_ssid        = WIFI_SSID;
-    config.wifi_password    = WIFI_PASS;
-    config.api_base_url     = API_BASE_URL;
-    config.device_id        = DEVICE_ID;
-    config.tenant_id        = TENANT_ID;
-    config.device_secret    = DEVICE_SECRET;
+    // 1. Configure the HXTP Client
+    Config config;
     config.device_type      = "smart-relay";
-    config.firmware_version = "1.0.0";
-    config.verify_server    = false; 
+    config.firmware_version = "1.2.0";
+    config.verify_server    = true; // Enforce Root CA validation
 
-    hxtpClient = new hxtp::HXTPClient(config);
-    hxtpClient->begin();
+    // 2. Initialize the Client
+    hxtpClient = new hxtp::Client(config);
+    hxtpClient->onStateChange(onHxtpStateChange, nullptr);
 
-    // Register Capability: ID 1, Action "toggle"
+    // 3. Register Capability: ID 1, Action "toggle"
+    // The server-side dashboard should show a toggle switch for this device.
     hxtpClient->registerCapability(1, "toggle", handleToggleRelay);
 
+    hxtpClient->begin();
+
+    // 4. Start Connection Lifecycle
     hxtpClient->connect();
 }
 

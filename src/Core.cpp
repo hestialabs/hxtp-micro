@@ -269,10 +269,10 @@ bool json_get_raw(
 }
 
 /* ════════════════════════════════════════════════════════════════════
- *  HxtpCore Implementation
+ *  Core Implementation
  * ════════════════════════════════════════════════════════════════════ */
 
-HxtpCore::HxtpCore()
+Core::Core()
     : initialized_(false)
     , config_(nullptr)
     , storage_(nullptr)
@@ -286,13 +286,13 @@ HxtpCore::HxtpCore()
     memset(device_secret_, 0, sizeof(device_secret_));
 }
 
-HxtpError HxtpCore::init(
-    const HXTPConfig* config,
-    const HxtpStorageAdapter* storage,
-    const HxtpPlatformCrypto* platform)
+Error Core::init(
+    const Config* config,
+    const StorageAdapter* storage,
+    const PlatformCrypto* platform)
 {
-    if (!config || !platform) return HxtpError::INVALID_PARAMS;
-    if (!platform->random_bytes || !platform->get_epoch_ms) return HxtpError::INVALID_PARAMS;
+    if (!config || !platform) return Error::INVALID_PARAMS;
+    if (!platform->random_bytes || !platform->get_epoch_ms) return Error::INVALID_PARAMS;
 
     config_   = config;
     storage_  = storage;
@@ -301,14 +301,14 @@ HxtpError HxtpCore::init(
     /* ── Initialize storage ────────────────────────── */
     if (storage_ && storage_->init) {
         if (!storage_->init()) {
-            return HxtpError::STORAGE_INIT_FAILED;
+            return Error::STORAGE_INIT_FAILED;
         }
     }
 
     /* ── Device ID ─────────────────────────────────── */
     if (config_->device_id) {
         size_t dlen = strlen(config_->device_id);
-        if (dlen > HXTP_DEVICE_ID_LEN) dlen = HXTP_DEVICE_ID_LEN;
+        if (dlen > DeviceIdLen) dlen = DeviceIdLen;
         memcpy(device_id_, config_->device_id, dlen);
         device_id_[dlen] = '\0';
     } else if (storage_ && storage_->read_device_id) {
@@ -321,15 +321,15 @@ HxtpError HxtpCore::init(
     /* ── Tenant ID ─────────────────────────────────── */
     if (config_->tenant_id) {
         size_t tlen = strlen(config_->tenant_id);
-        if (tlen > HXTP_UUID_LEN) tlen = HXTP_UUID_LEN;
+        if (tlen > UuidLen) tlen = UuidLen;
         memcpy(tenant_id_, config_->tenant_id, tlen);
         tenant_id_[tlen] = '\0';
     }
 
     /* ── Client ID ─────────────────────────────────── */
     /* Generate a UUID v4 for this session */
-    HxtpError err = crypto::generate_uuid_v4(client_id_, platform_->random_bytes);
-    if (err != HxtpError::OK) return err;
+    Error err = crypto::generate_uuid_v4(client_id_, platform_->random_bytes);
+    if (err != Error::OK) return err;
 
     /* ── Device Secret ─────────────────────────────── */
     if (config_->device_secret) {
@@ -337,12 +337,12 @@ HxtpError HxtpCore::init(
         size_t decoded_len = 0;
         if (!crypto::hex_decode(
                 config_->device_secret, strlen(config_->device_secret),
-                device_secret_, &decoded_len) || decoded_len != HXTP_SECRET_LEN) {
-            return HxtpError::SECRET_CORRUPT;
+                device_secret_, &decoded_len) || decoded_len != SecretLen) {
+            return Error::SECRET_CORRUPT;
         }
         secret_loaded_ = true;
     } else if (storage_ && storage_->read_secret) {
-        if (storage_->read_secret(device_secret_, HXTP_SECRET_LEN)) {
+        if (storage_->read_secret(device_secret_, SecretLen)) {
             secret_loaded_ = true;
         }
         /* Not fatal — secret may arrive during provisioning */
@@ -359,27 +359,27 @@ HxtpError HxtpCore::init(
     /* ── Initialize validation context ─────────────── */
     val_ctx_.init();
     val_ctx_.get_epoch_ms = platform_->get_epoch_ms;
-    memcpy(val_ctx_.device_id, device_id_, HXTP_DEVICE_ID_LEN + 1);
-    memcpy(val_ctx_.tenant_id, tenant_id_, HXTP_UUID_LEN + 1);
+    memcpy(val_ctx_.device_id, device_id_, DeviceIdLen + 1);
+    memcpy(val_ctx_.tenant_id, tenant_id_, UuidLen + 1);
 
     if (secret_loaded_) {
-        memcpy(val_ctx_.device_secret, device_secret_, HXTP_SECRET_LEN);
+        memcpy(val_ctx_.device_secret, device_secret_, SecretLen);
         val_ctx_.secret_loaded = true;
     }
 
     initialized_ = true;
-    return HxtpError::OK;
+    return Error::OK;
 }
 
 /* ════════════════════════════════════════════════════════════════════
  *  JSON Header Parsing
  * ════════════════════════════════════════════════════════════════════ */
 
-HxtpError HxtpCore::parse_json_header(HxtpInboundFrame* frame) {
+Error Core::parse_json_header(InboundFrame* frame) {
     const char* json = frame->json_ptr;
     size_t jlen      = frame->json_len;
 
-    if (!json || jlen == 0) return HxtpError::FRAME_JSON_INVALID;
+    if (!json || jlen == 0) return Error::FRAME_JSON_INVALID;
 
     char buf[128];
     size_t blen = 0;
@@ -463,10 +463,10 @@ HxtpError HxtpCore::parse_json_header(HxtpInboundFrame* frame) {
         frame->params_len = 0;
     }
 
-    return HxtpError::OK;
+    return Error::OK;
 }
 
-HxtpError HxtpCore::parse_command_payload(HxtpInboundFrame* frame) {
+Error Core::parse_command_payload(InboundFrame* frame) {
     const char* json = frame->json_ptr;
     size_t jlen      = frame->json_len;
 
@@ -484,35 +484,35 @@ HxtpError HxtpCore::parse_command_payload(HxtpInboundFrame* frame) {
         frame->command.capability_id = cid;
     }
 
-    return HxtpError::OK;
+    return Error::OK;
 }
 
 /* ════════════════════════════════════════════════════════════════════
  *  Inbound Message Processing
  * ════════════════════════════════════════════════════════════════════ */
 
-HxtpError HxtpCore::process_inbound(
+Error Core::process_inbound(
     const char* topic,
     const uint8_t* raw, size_t raw_len,
     uint8_t* ack_buf, size_t ack_cap, size_t* ack_len)
 {
     (void)topic; /* topic used for routing context — not needed for validation */
 
-    if (!initialized_) return HxtpError::NOT_INITIALIZED;
+    if (!initialized_) return Error::NOT_INITIALIZED;
     if (ack_len) *ack_len = 0;
 
     /* ── Step A: Frame Decode (binary header) ────────── */
-    HxtpInboundFrame frame{};
+    InboundFrame frame{};
 
-    HxtpError err = frame_decode(raw, raw_len, &frame);
-    if (err != HxtpError::OK) return err;
+    Error err = frame_decode(raw, raw_len, &frame);
+    if (err != Error::OK) return err;
 
     /* ── Step B: Parse JSON header ───────────────────── */
     err = parse_json_header(&frame);
-    if (err != HxtpError::OK) return err;
+    if (err != Error::OK) return err;
 
     /* ── Step C: Run 7-step validation pipeline ──────── */
-    HxtpValidationResult vr = validate_message(&frame, &val_ctx_);
+    ValidationResult vr = validate_message(&frame, &val_ctx_);
     if (!vr.passed) {
         /* Build error ACK if we have a request_id */
         if (!frame.header.request_id.empty() && ack_buf && ack_cap > 0 && ack_len) {
@@ -526,29 +526,29 @@ HxtpError HxtpCore::process_inbound(
 
         /* Map validation step to error code */
         switch (vr.failed_step) {
-            case HxtpValidationStep::VERSION_CHECK:      return HxtpError::VERSION_MISMATCH;
-            case HxtpValidationStep::TIMESTAMP_CHECK:    return HxtpError::TIMESTAMP_EXPIRED;
-            case HxtpValidationStep::PAYLOAD_SIZE_CHECK:  return HxtpError::PAYLOAD_TOO_LARGE;
-            case HxtpValidationStep::NONCE_CHECK:        return HxtpError::NONCE_REUSED;
-            case HxtpValidationStep::PAYLOAD_HASH_CHECK: return HxtpError::HASH_MISMATCH;
-            case HxtpValidationStep::SEQUENCE_CHECK:     return HxtpError::SEQUENCE_VIOLATION;
-            case HxtpValidationStep::SIGNATURE_CHECK:    return HxtpError::SIGNATURE_INVALID;
-            default:                                      return HxtpError::INTERNAL_ERROR;
+            case ValidationStep::VERSION_CHECK:      return Error::VERSION_MISMATCH;
+            case ValidationStep::TIMESTAMP_CHECK:    return Error::TIMESTAMP_EXPIRED;
+            case ValidationStep::PAYLOAD_SIZE_CHECK:  return Error::PAYLOAD_TOO_LARGE;
+            case ValidationStep::NONCE_CHECK:        return Error::NONCE_REUSED;
+            case ValidationStep::PAYLOAD_HASH_CHECK: return Error::HASH_MISMATCH;
+            case ValidationStep::SEQUENCE_CHECK:     return Error::SEQUENCE_VIOLATION;
+            case ValidationStep::SIGNATURE_CHECK:    return Error::SIGNATURE_INVALID;
+            default:                                      return Error::INTERNAL_ERROR;
         }
     }
 
     /* ── Step D: Type-specific processing ────────────── */
-    if (frame.wire_type == HxtpMessageTypeBin::COMMAND) {
+    if (frame.wire_type == MessageType::COMMAND) {
         /* Parse command-specific fields */
         err = parse_command_payload(&frame);
-        if (err != HxtpError::OK) return err;
+        if (err != Error::OK) return err;
 
         if (frame.command.action.empty()) {
-            return HxtpError::UNKNOWN_ACTION;
+            return Error::UNKNOWN_ACTION;
         }
 
         /* Execute capability */
-        HxtpCapabilityResult result = capabilities_.execute(
+        CapabilityResult result = capabilities_.execute(
             frame.command.action.c_str(),
             frame.params_ptr,
             frame.params_len
@@ -569,21 +569,21 @@ HxtpError HxtpCore::process_inbound(
         }
 
         if (!result.success) {
-            return HxtpError::UNKNOWN_ACTION;
+            return Error::UNKNOWN_ACTION;
         }
     }
-    else if (frame.wire_type == HxtpMessageTypeBin::HEARTBEAT) {
+    else if (frame.wire_type == MessageType::HEARTBEAT) {
         /* Heartbeat received — nothing to do (transport layer handles timeout) */
     }
 
-    return HxtpError::OK;
+    return Error::OK;
 }
 
 /* ════════════════════════════════════════════════════════════════════
  *  Sequence Counter
  * ════════════════════════════════════════════════════════════════════ */
 
-int64_t HxtpCore::next_sequence() {
+int64_t Core::next_sequence() {
     ++outbound_sequence_;
 
     /* Persist if storage available (non-blocking best-effort) */
@@ -598,22 +598,22 @@ int64_t HxtpCore::next_sequence() {
  *  Outbound Message Construction
  * ════════════════════════════════════════════════════════════════════ */
 
-HxtpError HxtpCore::build_signed_json(
+Error Core::build_signed_json(
     const char* message_type,
     const char* body_json, uint32_t body_len,
     char* json_out, size_t json_cap, size_t* json_len)
 {
-    if (!initialized_) return HxtpError::NOT_INITIALIZED;
+    if (!initialized_) return Error::NOT_INITIALIZED;
 
     /* Generate message_id, nonce */
     char msg_id[37];
-    HxtpError err = crypto::generate_uuid_v4(msg_id, platform_->random_bytes);
-    if (err != HxtpError::OK) return err;
+    Error err = crypto::generate_uuid_v4(msg_id, platform_->random_bytes);
+    if (err != Error::OK) return err;
 
-    char nonce[HXTP_MAX_NONCE_LEN + 1];
+    char nonce[MaxNonceLen + 1];
     size_t nonce_len = 0;
     err = crypto::generate_nonce(nonce, &nonce_len, platform_->random_bytes);
-    if (err != HxtpError::OK) return err;
+    if (err != Error::OK) return err;
 
     /* Timestamp & sequence */
     int64_t ts  = platform_->get_epoch_ms();
@@ -622,13 +622,13 @@ HxtpError HxtpCore::build_signed_json(
     /* Compute payload hash (SHA-256 of body/params JSON) */
     const char* hash_input = (body_json && body_len > 0) ? body_json : "{}";
     uint32_t hash_input_len = (body_json && body_len > 0) ? body_len : 2;
-    char payload_hash[HXTP_SHA256_HEX_LEN + 1];
+    char payload_hash[Sha256HexLen + 1];
     err = crypto::sha256_hex(hash_input, hash_input_len, payload_hash);
-    if (err != HxtpError::OK) return err;
+    if (err != Error::OK) return err;
 
     /* Build canonical string for signature */
-    HxtpMessageHeader hdr;
-    hdr.version.set(HXTP_VERSION_STRING);
+    MessageHeader hdr;
+    hdr.version.set(VersionString);
     hdr.message_type.set(message_type);
     hdr.device_id.set(device_id_);
     hdr.tenant_id.set(tenant_id_);
@@ -639,19 +639,19 @@ HxtpError HxtpCore::build_signed_json(
     char canonical[512];
     size_t canonical_len = 0;
     if (!build_canonical_string(&hdr, canonical, sizeof(canonical), &canonical_len)) {
-        return HxtpError::BUFFER_OVERFLOW;
+        return Error::BUFFER_OVERFLOW;
     }
 
     /* Compute HMAC-SHA256 signature */
-    char signature[HXTP_HMAC_HEX_LEN + 1];
-    if (!secret_loaded_) return HxtpError::SECRET_NOT_FOUND;
+    char signature[HmacHexLen + 1];
+    if (!secret_loaded_) return Error::SECRET_NOT_FOUND;
 
     err = crypto::hmac_sha256_hex(
-        device_secret_, HXTP_SECRET_LEN,
+        device_secret_, SecretLen,
         canonical, canonical_len,
         signature
     );
-    if (err != HxtpError::OK) return err;
+    if (err != Error::OK) return err;
 
     /* Build JSON envelope.
      * We construct it manually to avoid dynamic allocation. */
@@ -668,7 +668,7 @@ HxtpError HxtpCore::build_signed_json(
         "\"nonce\":\"%s\","
         "\"payload_hash\":\"%s\","
         "\"signature\":\"%s\"",
-        HXTP_VERSION_STRING,
+        VersionString,
         message_type,
         msg_id,
         device_id_,
@@ -682,7 +682,7 @@ HxtpError HxtpCore::build_signed_json(
     );
 
     if (written < 0 || static_cast<size_t>(written) >= json_cap) {
-        return HxtpError::BUFFER_OVERFLOW;
+        return Error::BUFFER_OVERFLOW;
     }
 
     /* Append body if present */
@@ -691,11 +691,11 @@ HxtpError HxtpCore::build_signed_json(
     if (body_json && body_len > 0) {
         /* Determine key based on message type */
         const char* body_key = "params";
-        if (strcmp(message_type, HxtpMessageTypeStr::STATE) == 0) {
+        if (strcmp(message_type, MessageTypeStr::STATE) == 0) {
             body_key = "state";
-        } else if (strcmp(message_type, HxtpMessageTypeStr::TELEMETRY) == 0) {
+        } else if (strcmp(message_type, MessageTypeStr::TELEMETRY) == 0) {
             body_key = "data";
-        } else if (strcmp(message_type, HxtpMessageTypeStr::ACK) == 0) {
+        } else if (strcmp(message_type, MessageTypeStr::ACK) == 0) {
             body_key = "result";
         }
 
@@ -704,63 +704,63 @@ HxtpError HxtpCore::build_signed_json(
                              body_key,
                              static_cast<int>(body_len), body_json);
         if (extra < 0 || pos + static_cast<size_t>(extra) >= json_cap) {
-            return HxtpError::BUFFER_OVERFLOW;
+            return Error::BUFFER_OVERFLOW;
         }
         pos += static_cast<size_t>(extra);
     }
 
     /* Close object */
-    if (pos + 2 > json_cap) return HxtpError::BUFFER_OVERFLOW;
+    if (pos + 2 > json_cap) return Error::BUFFER_OVERFLOW;
     json_out[pos++] = '}';
     json_out[pos]   = '\0';
 
     *json_len = pos;
-    return HxtpError::OK;
+    return Error::OK;
 }
 
-HxtpError HxtpCore::build_outbound(
-    HxtpOutboundContext* ctx,
+Error Core::build_outbound(
+    OutboundContext* ctx,
     uint8_t* out, size_t out_cap, size_t* out_len)
 {
-    if (!ctx || !out || !out_len) return HxtpError::INVALID_PARAMS;
-    if (!initialized_) return HxtpError::NOT_INITIALIZED;
+    if (!ctx || !out || !out_len) return Error::INVALID_PARAMS;
+    if (!initialized_) return Error::NOT_INITIALIZED;
 
     /* Build signed JSON */
-    char json_buf[HXTP_MAX_PAYLOAD_BYTES];
+    char json_buf[MaxPayloadBytes];
     size_t json_len = 0;
 
-    HxtpError err = build_signed_json(
+    Error err = build_signed_json(
         ctx->message_type,
         ctx->payload_json, ctx->payload_json_len,
         json_buf, sizeof(json_buf), &json_len
     );
-    if (err != HxtpError::OK) return err;
+    if (err != Error::OK) return err;
 
     /* Encode binary frame */
-    HxtpMessageTypeBin wire_type = frame_str_to_type(ctx->message_type);
+    MessageType wire_type = frame_str_to_type(ctx->message_type);
     return frame_encode(wire_type, json_buf, static_cast<uint32_t>(json_len),
                         out, out_cap, out_len);
 }
 
-HxtpError HxtpCore::build_heartbeat(
+Error Core::build_heartbeat(
     uint8_t* out, size_t out_cap, size_t* out_len)
 {
     char json_buf[512];
     size_t json_len = 0;
 
-    HxtpError err = build_signed_json(
-        HxtpMessageTypeStr::HEARTBEAT,
+    Error err = build_signed_json(
+        MessageTypeStr::HEARTBEAT,
         nullptr, 0,
         json_buf, sizeof(json_buf), &json_len
     );
-    if (err != HxtpError::OK) return err;
+    if (err != Error::OK) return err;
 
-    return frame_encode(HxtpMessageTypeBin::HEARTBEAT,
+    return frame_encode(MessageType::HEARTBEAT,
                         json_buf, static_cast<uint32_t>(json_len),
                         out, out_cap, out_len);
 }
 
-HxtpError HxtpCore::build_hello(
+Error Core::build_hello(
     uint8_t* out, size_t out_cap, size_t* out_len)
 {
     /* HELLO payload includes firmware version and device type */
@@ -770,62 +770,62 @@ HxtpError HxtpCore::build_hello(
         config_->firmware_version ? config_->firmware_version : "0.0.1",
         config_->device_type ? config_->device_type : "esp32"
     );
-    if (blen < 0) return HxtpError::BUFFER_OVERFLOW;
+    if (blen < 0) return Error::BUFFER_OVERFLOW;
 
     char json_buf[1024];
     size_t json_len = 0;
 
-    HxtpError err = build_signed_json(
-        HxtpMessageTypeStr::HELLO,
+    Error err = build_signed_json(
+        MessageTypeStr::HELLO,
         body, static_cast<uint32_t>(blen),
         json_buf, sizeof(json_buf), &json_len
     );
-    if (err != HxtpError::OK) return err;
+    if (err != Error::OK) return err;
 
-    return frame_encode(HxtpMessageTypeBin::HELLO,
+    return frame_encode(MessageType::HELLO,
                         json_buf, static_cast<uint32_t>(json_len),
                         out, out_cap, out_len);
 }
 
-HxtpError HxtpCore::build_state(
+Error Core::build_state(
     const char* state_json, uint32_t state_len,
     uint8_t* out, size_t out_cap, size_t* out_len)
 {
-    char json_buf[HXTP_MAX_PAYLOAD_BYTES];
+    char json_buf[MaxPayloadBytes];
     size_t json_len = 0;
 
-    HxtpError err = build_signed_json(
-        HxtpMessageTypeStr::STATE,
+    Error err = build_signed_json(
+        MessageTypeStr::STATE,
         state_json, state_len,
         json_buf, sizeof(json_buf), &json_len
     );
-    if (err != HxtpError::OK) return err;
+    if (err != Error::OK) return err;
 
-    return frame_encode(HxtpMessageTypeBin::STATE,
+    return frame_encode(MessageType::STATE,
                         json_buf, static_cast<uint32_t>(json_len),
                         out, out_cap, out_len);
 }
 
-HxtpError HxtpCore::build_telemetry(
+Error Core::build_telemetry(
     const char* telemetry_json, uint32_t telemetry_len,
     uint8_t* out, size_t out_cap, size_t* out_len)
 {
-    char json_buf[HXTP_MAX_PAYLOAD_BYTES];
+    char json_buf[MaxPayloadBytes];
     size_t json_len = 0;
 
-    HxtpError err = build_signed_json(
-        HxtpMessageTypeStr::TELEMETRY,
+    Error err = build_signed_json(
+        MessageTypeStr::TELEMETRY,
         telemetry_json, telemetry_len,
         json_buf, sizeof(json_buf), &json_len
     );
-    if (err != HxtpError::OK) return err;
+    if (err != Error::OK) return err;
 
-    return frame_encode(HxtpMessageTypeBin::TELEMETRY,
+    return frame_encode(MessageType::TELEMETRY,
                         json_buf, static_cast<uint32_t>(json_len),
                         out, out_cap, out_len);
 }
 
-HxtpError HxtpCore::build_ack(
+Error Core::build_ack(
     const char* request_id,
     bool success,
     const char* error_msg,
@@ -837,29 +837,29 @@ HxtpError HxtpCore::build_ack(
         blen = snprintf(body, sizeof(body),
             "{\"request_id\":\"%s\",\"status\":\"%s\"}",
             request_id ? request_id : "",
-            HxtpAckStatus::EXECUTED
+            AckStatus::EXECUTED
         );
     } else {
         blen = snprintf(body, sizeof(body),
             "{\"request_id\":\"%s\",\"status\":\"%s\",\"error\":\"%s\"}",
             request_id ? request_id : "",
-            HxtpAckStatus::FAILED,
+            AckStatus::FAILED,
             error_msg ? error_msg : "UNKNOWN_ERROR"
         );
     }
-    if (blen < 0) return HxtpError::BUFFER_OVERFLOW;
+    if (blen < 0) return Error::BUFFER_OVERFLOW;
 
     char json_buf[1024];
     size_t json_len = 0;
 
-    HxtpError err = build_signed_json(
-        HxtpMessageTypeStr::ACK,
+    Error err = build_signed_json(
+        MessageTypeStr::ACK,
         body, static_cast<uint32_t>(blen),
         json_buf, sizeof(json_buf), &json_len
     );
-    if (err != HxtpError::OK) return err;
+    if (err != Error::OK) return err;
 
-    return frame_encode(HxtpMessageTypeBin::ACK,
+    return frame_encode(MessageType::ACK,
                         json_buf, static_cast<uint32_t>(json_len),
                         out, out_cap, out_len);
 }
@@ -868,7 +868,7 @@ HxtpError HxtpCore::build_ack(
  *  MQTT Topic Builder
  * ════════════════════════════════════════════════════════════════════ */
 
-bool HxtpCore::build_topic(
+bool Core::build_topic(
     const char* channel,
     char* out, size_t out_cap)
 {

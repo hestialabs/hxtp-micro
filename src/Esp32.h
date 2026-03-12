@@ -6,14 +6,14 @@
  *   - WiFiClientSecure for TLS 1.2+ MQTT
  *   - ESP32 hardware RNG (esp_random)
  *   - NTP-synced epoch time
- *   - HxtpPlatformCrypto adapter
+ *   - PlatformCrypto adapter
  *
  * Copyright (c) 2026 Hestia Labs
  * SDK-License-Identifier: MIT
  */
 
-#ifndef HXTP_PLATFORM_ESP32_H
-#define HXTP_PLATFORM_ESP32_H
+#ifndef PLATFORM_ESP32_H
+#define PLATFORM_ESP32_H
 
 #include "Types.h"
 
@@ -53,8 +53,8 @@ static int64_t esp32_get_epoch_ms() {
 
 /* ── Platform Crypto Adapter ────────────────────────────────────────── */
 
-inline HxtpPlatformCrypto create_esp32_crypto() {
-    HxtpPlatformCrypto pc;
+inline PlatformCrypto create_esp32_crypto() {
+    PlatformCrypto pc;
     pc.random_bytes = esp32_random_bytes;
     pc.get_time_ms  = esp32_get_time_ms;
     pc.get_epoch_ms = esp32_get_epoch_ms;
@@ -77,4 +77,4 @@ bool esp32_sync_time(const char* ntp_server = "pool.ntp.org", uint32_t timeout_m
 } /* namespace hxtp */
 
 #endif /* ESP32 */
-#endif /* HXTP_PLATFORM_ESP32_H */
+#endif /* PLATFORM_ESP32_H */

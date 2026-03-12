@@ -13,15 +13,15 @@
  * SDK-License-Identifier: MIT
  */
 
-#ifndef HXTP_CORE_H
-#define HXTP_CORE_H
+#ifndef CORE_H
+#define CORE_H
 
 #include "Types.h"
 #include "Errors.h"
 #include "Frame.h"
 #include "Validation.h"
 #include "Capability.h"
-#include "HXTPCrypto.h"
+#include "Crypto.h"
 
 namespace hxtp {
 
@@ -90,9 +90,9 @@ bool json_get_raw(
 
 /* ── Core Engine ────────────────────────────────────────────────────── */
 
-class HxtpCore {
+class Core {
 public:
-    HxtpCore();
+    Core();
 
     /**
      * Initialize the core engine.
@@ -101,12 +101,12 @@ public:
      * @param config    SDK configuration
      * @param storage   Platform storage adapter
      * @param platform  Platform crypto (RNG, time)
-     * @return          HxtpError::OK or error
+     * @return          Error::OK or error
      */
-    HxtpError init(
-        const HXTPConfig* config,
-        const HxtpStorageAdapter* storage,
-        const HxtpPlatformCrypto* platform
+    Error init(
+        const Config* config,
+        const StorageAdapter* storage,
+        const PlatformCrypto* platform
     );
 
     /**
@@ -119,9 +119,9 @@ public:
      * @param ack_buf    Buffer for ACK response frame (caller-provided)
      * @param ack_cap    Capacity of ack_buf
      * @param ack_len    Receives length of ACK frame (0 if no ACK needed)
-     * @return           HxtpError::OK if processed, or specific error
+     * @return           Error::OK if processed, or specific error
      */
-    HxtpError process_inbound(
+    Error process_inbound(
         const char* topic,
         const uint8_t* raw, size_t raw_len,
         uint8_t* ack_buf, size_t ack_cap, size_t* ack_len
@@ -134,31 +134,31 @@ public:
      * @param out        Output buffer for binary frame
      * @param out_cap    Buffer capacity
      * @param out_len    Receives total frame length
-     * @return           HxtpError::OK or error
+     * @return           Error::OK or error
      */
-    HxtpError build_outbound(
-        HxtpOutboundContext* ctx,
+    Error build_outbound(
+        OutboundContext* ctx,
         uint8_t* out, size_t out_cap, size_t* out_len
     );
 
     /**
      * Build a heartbeat frame.
      */
-    HxtpError build_heartbeat(
+    Error build_heartbeat(
         uint8_t* out, size_t out_cap, size_t* out_len
     );
 
     /**
      * Build a HELLO handshake frame.
      */
-    HxtpError build_hello(
+    Error build_hello(
         uint8_t* out, size_t out_cap, size_t* out_len
     );
 
     /**
      * Build a state report frame.
      */
-    HxtpError build_state(
+    Error build_state(
         const char* state_json, uint32_t state_len,
         uint8_t* out, size_t out_cap, size_t* out_len
     );
@@ -166,7 +166,7 @@ public:
     /**
      * Build a telemetry frame.
      */
-    HxtpError build_telemetry(
+    Error build_telemetry(
         const char* telemetry_json, uint32_t telemetry_len,
         uint8_t* out, size_t out_cap, size_t* out_len
     );
@@ -174,7 +174,7 @@ public:
     /**
      * Build an ACK frame for a command.
      */
-    HxtpError build_ack(
+    Error build_ack(
         const char* request_id,
         bool success,
         const char* error_msg,
@@ -199,31 +199,35 @@ public:
     bool                is_initialized() const { return initialized_; }
     const char*         device_id() const { return device_id_; }
     const char*         tenant_id() const { return tenant_id_; }
+    const uint8_t*      device_secret() const { return device_secret_; }
+    const StorageAdapter* storage() const { return storage_; }
+    const Config*       config() const { return config_; }
+    const PlatformCrypto* platform() const { return platform_; }
 
 private:
-    /* ── Parse JSON header fields into HxtpInboundFrame ── */
-    HxtpError parse_json_header(HxtpInboundFrame* frame);
-    HxtpError parse_command_payload(HxtpInboundFrame* frame);
+    /* ── Parse JSON header fields into InboundFrame ── */
+    Error parse_json_header(InboundFrame* frame);
+    Error parse_command_payload(InboundFrame* frame);
 
     /* ── Build signed JSON envelope ─────────────────────── */
-    HxtpError build_signed_json(
+    Error build_signed_json(
         const char* message_type,
         const char* body_json, uint32_t body_len,
         char* json_out, size_t json_cap, size_t* json_len
     );
 
     bool                    initialized_;
-    const HXTPConfig*       config_;
-    const HxtpStorageAdapter* storage_;
-    const HxtpPlatformCrypto* platform_;
+    const Config*           config_;
+    const StorageAdapter*   storage_;
+    const PlatformCrypto*   platform_;
 
     /* Identity */
-    char    device_id_[HXTP_DEVICE_ID_LEN + 1];
-    char    tenant_id_[HXTP_UUID_LEN + 1];
-    char    client_id_[HXTP_UUID_LEN + 1];
+    char    device_id_[DeviceIdLen + 1];
+    char    tenant_id_[UuidLen + 1];
+    char    client_id_[UuidLen + 1];
 
     /* Secret material */
-    uint8_t device_secret_[HXTP_SECRET_LEN];
+    uint8_t device_secret_[SecretLen];
     bool    secret_loaded_;
 
     /* Sequence */
@@ -236,4 +240,4 @@ private:
 
 } /* namespace hxtp */
 
-#endif /* HXTP_CORE_H */
+#endif /* CORE_H */

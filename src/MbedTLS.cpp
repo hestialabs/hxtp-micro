@@ -11,7 +11,7 @@
 
 #ifdef ESP32
 
-#include "HXTPCrypto.h"
+#include "Crypto.h"
 #include "Config.h"
 #include <cstring>
 
@@ -84,65 +84,65 @@ bool base64_encode(const uint8_t* in, size_t in_len, char* out, size_t out_cap, 
 
 /* ── SHA-256 ────────────────────────────────────────────────────────── */
 
-HxtpError sha256(const uint8_t* data, size_t len, uint8_t out[HXTP_SHA256_LEN]) {
+Error sha256(const uint8_t* data, size_t len, uint8_t out[Sha256Len]) {
     mbedtls_sha256_context ctx;
     mbedtls_sha256_init(&ctx);
 
 #if MBEDTLS_VERSION_NUMBER >= 0x03000000
     /* mbedTLS 3.x — base functions return int */
     int ret = mbedtls_sha256_starts(&ctx, 0);
-    if (ret != 0) { mbedtls_sha256_free(&ctx); return HxtpError::SHA256_COMPUTE_FAILED; }
+    if (ret != 0) { mbedtls_sha256_free(&ctx); return Error::SHA256_COMPUTE_FAILED; }
 
     ret = mbedtls_sha256_update(&ctx, data, len);
-    if (ret != 0) { mbedtls_sha256_free(&ctx); return HxtpError::SHA256_COMPUTE_FAILED; }
+    if (ret != 0) { mbedtls_sha256_free(&ctx); return Error::SHA256_COMPUTE_FAILED; }
 
     ret = mbedtls_sha256_finish(&ctx, out);
     mbedtls_sha256_free(&ctx);
-    return (ret == 0) ? HxtpError::OK : HxtpError::SHA256_COMPUTE_FAILED;
+    return (ret == 0) ? Error::OK : Error::SHA256_COMPUTE_FAILED;
 #else
     /* mbedTLS 2.x (ESP-IDF) — these functions return void */
     mbedtls_sha256_starts(&ctx, 0); /* 0 = SHA-256, not SHA-224 */
     mbedtls_sha256_update(&ctx, data, len);
     mbedtls_sha256_finish(&ctx, out);
     mbedtls_sha256_free(&ctx);
-    return HxtpError::OK;
+    return Error::OK;
 #endif
 }
 
-HxtpError sha256_hex(const char* str, size_t str_len, char out_hex[HXTP_SHA256_HEX_LEN + 1]) {
-    uint8_t hash[HXTP_SHA256_LEN];
-    HxtpError err = sha256(reinterpret_cast<const uint8_t*>(str), str_len, hash);
-    if (err != HxtpError::OK) return err;
-    hex_encode(hash, HXTP_SHA256_LEN, out_hex);
-    return HxtpError::OK;
+Error sha256_hex(const char* str, size_t str_len, char out_hex[Sha256HexLen + 1]) {
+    uint8_t hash[Sha256Len];
+    Error err = sha256(reinterpret_cast<const uint8_t*>(str), str_len, hash);
+    if (err != Error::OK) return err;
+    hex_encode(hash, Sha256Len, out_hex);
+    return Error::OK;
 }
 
 /* ── HMAC-SHA256 ────────────────────────────────────────────────────── */
 
-HxtpError hmac_sha256(
+Error hmac_sha256(
     const uint8_t* key, size_t key_len,
     const uint8_t* data, size_t data_len,
-    uint8_t out[HXTP_HMAC_LEN]
+    uint8_t out[HmacLen]
 ) {
     const mbedtls_md_info_t* md_info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-    if (!md_info) return HxtpError::HMAC_COMPUTE_FAILED;
+    if (!md_info) return Error::HMAC_COMPUTE_FAILED;
 
     int ret = mbedtls_md_hmac(md_info, key, key_len, data, data_len, out);
-    return (ret == 0) ? HxtpError::OK : HxtpError::HMAC_COMPUTE_FAILED;
+    return (ret == 0) ? Error::OK : Error::HMAC_COMPUTE_FAILED;
 }
 
-HxtpError hmac_sha256_hex(
+Error hmac_sha256_hex(
     const uint8_t* key, size_t key_len,
     const char* data, size_t data_len,
-    char out_hex[HXTP_HMAC_HEX_LEN + 1]
+    char out_hex[HmacHexLen + 1]
 ) {
-    uint8_t mac[HXTP_HMAC_LEN];
-    HxtpError err = hmac_sha256(key, key_len,
+    uint8_t mac[HmacLen];
+    Error err = hmac_sha256(key, key_len,
                                  reinterpret_cast<const uint8_t*>(data), data_len,
                                  mac);
-    if (err != HxtpError::OK) return err;
-    hex_encode(mac, HXTP_HMAC_LEN, out_hex);
-    return HxtpError::OK;
+    if (err != Error::OK) return err;
+    hex_encode(mac, HmacLen, out_hex);
+    return Error::OK;
 }
 
 /* ── Constant-Time Compare ──────────────────────────────────────────── */
@@ -177,19 +177,19 @@ bool constant_time_hex_equal(const char* a, const char* b, size_t len) {
 
 #if HXTP_FEATURE_AES_GCM
 
-HxtpError aes256_gcm_decrypt(
-    const uint8_t key[HXTP_AES_KEY_LEN],
+Error aes256_gcm_decrypt(
+    const uint8_t key[AesKeyLen],
     const uint8_t* input, size_t input_len,
     uint8_t* output, size_t* output_len
 ) {
     /* Format: IV[12] + CIPHERTEXT[n] + TAG[16] */
-    const size_t overhead = HXTP_AES_GCM_IV_LEN + HXTP_AES_GCM_TAG_LEN;
-    if (input_len < overhead) return HxtpError::AES_DECRYPT_FAILED;
+    const size_t overhead = AesGcmIvLen + AesGcmTagLen;
+    if (input_len < overhead) return Error::AES_DECRYPT_FAILED;
 
     const uint8_t* iv   = input;
     size_t ct_len       = input_len - overhead;
-    const uint8_t* ct   = input + HXTP_AES_GCM_IV_LEN;
-    const uint8_t* tag  = input + HXTP_AES_GCM_IV_LEN + ct_len;
+    const uint8_t* ct   = input + AesGcmIvLen;
+    const uint8_t* tag  = input + AesGcmIvLen + ct_len;
 
     mbedtls_gcm_context ctx;
     mbedtls_gcm_init(&ctx);
@@ -197,33 +197,33 @@ HxtpError aes256_gcm_decrypt(
     int ret = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, key, 256);
     if (ret != 0) {
         mbedtls_gcm_free(&ctx);
-        return HxtpError::AES_DECRYPT_FAILED;
+        return Error::AES_DECRYPT_FAILED;
     }
 
     ret = mbedtls_gcm_auth_decrypt(
         &ctx, ct_len,
-        iv, HXTP_AES_GCM_IV_LEN,
+        iv, AesGcmIvLen,
         nullptr, 0,       /* no additional data */
-        tag, HXTP_AES_GCM_TAG_LEN,
+        tag, AesGcmTagLen,
         ct, output
     );
 
     mbedtls_gcm_free(&ctx);
 
-    if (ret != 0) return HxtpError::AES_DECRYPT_FAILED;
+    if (ret != 0) return Error::AES_DECRYPT_FAILED;
     *output_len = ct_len;
-    return HxtpError::OK;
+    return Error::OK;
 }
 
-HxtpError aes256_gcm_encrypt(
-    const uint8_t key[HXTP_AES_KEY_LEN],
+Error aes256_gcm_encrypt(
+    const uint8_t key[AesKeyLen],
     const uint8_t* plaintext, size_t pt_len,
     uint8_t* output, size_t* output_len,
     bool (*rng)(uint8_t*, size_t)
 ) {
     /* Output: IV[12] + CIPHERTEXT[pt_len] + TAG[16] */
-    uint8_t iv[HXTP_AES_GCM_IV_LEN];
-    if (!rng(iv, HXTP_AES_GCM_IV_LEN)) return HxtpError::RNG_FAILED;
+    uint8_t iv[AesGcmIvLen];
+    if (!rng(iv, AesGcmIvLen)) return Error::RNG_FAILED;
 
     mbedtls_gcm_context ctx;
     mbedtls_gcm_init(&ctx);
@@ -231,51 +231,51 @@ HxtpError aes256_gcm_encrypt(
     int ret = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, key, 256);
     if (ret != 0) {
         mbedtls_gcm_free(&ctx);
-        return HxtpError::CRYPTO_INIT_FAILED;
+        return Error::CRYPTO_INIT_FAILED;
     }
 
-    uint8_t tag[HXTP_AES_GCM_TAG_LEN];
-    uint8_t* ct_out = output + HXTP_AES_GCM_IV_LEN;
+    uint8_t tag[AesGcmTagLen];
+    uint8_t* ct_out = output + AesGcmIvLen;
 
     ret = mbedtls_gcm_crypt_and_tag(
         &ctx, MBEDTLS_GCM_ENCRYPT, pt_len,
-        iv, HXTP_AES_GCM_IV_LEN,
+        iv, AesGcmIvLen,
         nullptr, 0,       /* no additional data */
         plaintext, ct_out,
-        HXTP_AES_GCM_TAG_LEN, tag
+        AesGcmTagLen, tag
     );
 
     mbedtls_gcm_free(&ctx);
 
-    if (ret != 0) return HxtpError::CRYPTO_INIT_FAILED;
+    if (ret != 0) return Error::CRYPTO_INIT_FAILED;
 
     /* Write IV at beginning */
-    memcpy(output, iv, HXTP_AES_GCM_IV_LEN);
+    memcpy(output, iv, AesGcmIvLen);
     /* Write tag at end */
-    memcpy(output + HXTP_AES_GCM_IV_LEN + pt_len, tag, HXTP_AES_GCM_TAG_LEN);
+    memcpy(output + AesGcmIvLen + pt_len, tag, AesGcmTagLen);
 
-    *output_len = HXTP_AES_GCM_IV_LEN + pt_len + HXTP_AES_GCM_TAG_LEN;
-    return HxtpError::OK;
+    *output_len = AesGcmIvLen + pt_len + AesGcmTagLen;
+    return Error::OK;
 }
 
 #endif /* HXTP_FEATURE_AES_GCM */
 
 /* ── Nonce Generation ───────────────────────────────────────────────── */
 
-HxtpError generate_nonce(char* out, size_t* out_len, bool (*rng)(uint8_t*, size_t)) {
-    uint8_t raw[HXTP_NONCE_RAW_MIN];
-    if (!rng(raw, HXTP_NONCE_RAW_MIN)) return HxtpError::RNG_FAILED;
-    if (!base64_encode(raw, HXTP_NONCE_RAW_MIN, out, HXTP_MAX_NONCE_LEN + 1, out_len)) {
-        return HxtpError::RNG_FAILED;
+Error generate_nonce(char* out, size_t* out_len, bool (*rng)(uint8_t*, size_t)) {
+    uint8_t raw[NonceRawMin];
+    if (!rng(raw, NonceRawMin)) return Error::RNG_FAILED;
+    if (!base64_encode(raw, NonceRawMin, out, MaxNonceLen + 1, out_len)) {
+        return Error::RNG_FAILED;
     }
-    return HxtpError::OK;
+    return Error::OK;
 }
 
 /* ── UUID v4 Generation ─────────────────────────────────────────────── */
 
-HxtpError generate_uuid_v4(char out[37], bool (*rng)(uint8_t*, size_t)) {
+Error generate_uuid_v4(char out[37], bool (*rng)(uint8_t*, size_t)) {
     uint8_t raw[16];
-    if (!rng(raw, 16)) return HxtpError::RNG_FAILED;
+    if (!rng(raw, 16)) return Error::RNG_FAILED;
 
     /* Set version 4 */
     raw[6] = (raw[6] & 0x0F) | 0x40;
@@ -295,7 +295,7 @@ HxtpError generate_uuid_v4(char out[37], bool (*rng)(uint8_t*, size_t)) {
         }
     }
     out[oi] = '\0';
-    return HxtpError::OK;
+    return Error::OK;
 }
 
 } /* namespace crypto */

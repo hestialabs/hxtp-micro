@@ -12,8 +12,8 @@
  * SDK-License-Identifier: MIT
  */
 
-#ifndef HXTP_CRYPTO_H
-#define HXTP_CRYPTO_H
+#ifndef CRYPTO_H
+#define CRYPTO_H
 
 #include "Types.h"
 #include "Errors.h"
@@ -29,17 +29,17 @@ namespace crypto {
  * @param data     Input bytes
  * @param len      Input length
  * @param out      Output buffer (32 bytes)
- * @return         HxtpError::OK or SHA256_COMPUTE_FAILED
+ * @return         Error::OK or SHA256_COMPUTE_FAILED
  */
-HxtpError sha256(const uint8_t* data, size_t len, uint8_t out[HXTP_SHA256_LEN]);
+Error sha256(const uint8_t* data, size_t len, uint8_t out[Sha256Len]);
 
 /**
  * Compute SHA-256 of a string and write hex digest.
  * @param str      Null-terminated input string
  * @param out_hex  Output buffer (64 chars + null terminator, so ≥65)
- * @return         HxtpError::OK or error
+ * @return         Error::OK or error
  */
-HxtpError sha256_hex(const char* str, size_t str_len, char out_hex[HXTP_SHA256_HEX_LEN + 1]);
+Error sha256_hex(const char* str, size_t str_len, char out_hex[Sha256HexLen + 1]);
 
 /* ── HMAC-SHA256 ────────────────────────────────────────────────────── */
 
@@ -50,21 +50,21 @@ HxtpError sha256_hex(const char* str, size_t str_len, char out_hex[HXTP_SHA256_H
  * @param data     Data bytes
  * @param data_len Data length
  * @param out      Output buffer (32 bytes)
- * @return         HxtpError::OK or HMAC_COMPUTE_FAILED
+ * @return         Error::OK or HMAC_COMPUTE_FAILED
  */
-HxtpError hmac_sha256(
+Error hmac_sha256(
     const uint8_t* key, size_t key_len,
     const uint8_t* data, size_t data_len,
-    uint8_t out[HXTP_HMAC_LEN]
+    uint8_t out[HmacLen]
 );
 
 /**
  * Compute HMAC-SHA256 and produce hex digest.
  */
-HxtpError hmac_sha256_hex(
+Error hmac_sha256_hex(
     const uint8_t* key, size_t key_len,
     const char* data, size_t data_len,
-    char out_hex[HXTP_HMAC_HEX_LEN + 1]
+    char out_hex[HmacHexLen + 1]
 );
 
 /* ── Constant-Time Compare ──────────────────────────────────────────── */
@@ -92,10 +92,10 @@ bool constant_time_hex_equal(const char* a, const char* b, size_t len);
  * @param input_len   Total input length (must be >= 28)
  * @param output      Plaintext output buffer (must be >= input_len - 28)
  * @param output_len  Receives plaintext length
- * @return            HxtpError::OK or AES_DECRYPT_FAILED
+ * @return            Error::OK or AES_DECRYPT_FAILED
  */
-HxtpError aes256_gcm_decrypt(
-    const uint8_t key[HXTP_AES_KEY_LEN],
+Error aes256_gcm_decrypt(
+    const uint8_t key[AesKeyLen],
     const uint8_t* input, size_t input_len,
     uint8_t* output, size_t* output_len
 );
@@ -109,10 +109,10 @@ HxtpError aes256_gcm_decrypt(
  * @param output        Output buffer (must be >= pt_len + 28)
  * @param output_len    Receives total output length
  * @param rng           Platform RNG function
- * @return              HxtpError::OK or error
+ * @return              Error::OK or error
  */
-HxtpError aes256_gcm_encrypt(
-    const uint8_t key[HXTP_AES_KEY_LEN],
+Error aes256_gcm_encrypt(
+    const uint8_t key[AesKeyLen],
     const uint8_t* plaintext, size_t pt_len,
     uint8_t* output, size_t* output_len,
     bool (*rng)(uint8_t*, size_t)
@@ -154,12 +154,12 @@ bool base64_encode(const uint8_t* in, size_t in_len, char* out, size_t out_cap, 
 
 /**
  * Generate a random nonce, base64 encoded.
- * @param out      Output buffer (must be >= HXTP_MAX_NONCE_LEN + 1)
+ * @param out      Output buffer (must be >= MaxNonceLen + 1)
  * @param out_len  Receives encoded length
  * @param rng      Platform RNG function
- * @return         HxtpError::OK or RNG_FAILED
+ * @return         Error::OK or RNG_FAILED
  */
-HxtpError generate_nonce(char* out, size_t* out_len, bool (*rng)(uint8_t*, size_t));
+Error generate_nonce(char* out, size_t* out_len, bool (*rng)(uint8_t*, size_t));
 
 /* ── UUID v4 Generation ─────────────────────────────────────────────── */
 
@@ -167,11 +167,11 @@ HxtpError generate_nonce(char* out, size_t* out_len, bool (*rng)(uint8_t*, size_
  * Generate a UUID v4 string (xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx).
  * @param out  Output buffer (must be >= 37 bytes)
  * @param rng  Platform RNG function
- * @return     HxtpError::OK or RNG_FAILED
+ * @return     Error::OK or RNG_FAILED
  */
-HxtpError generate_uuid_v4(char out[37], bool (*rng)(uint8_t*, size_t));
+Error generate_uuid_v4(char out[37], bool (*rng)(uint8_t*, size_t));
 
 } /* namespace crypto */
 } /* namespace hxtp */
 
-#endif /* HXTP_CRYPTO_H */
+#endif /* CRYPTO_H */

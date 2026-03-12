@@ -11,8 +11,8 @@
  * SDK-License-Identifier: MIT
  */
 
-#ifndef HXTP_CAPABILITY_H
-#define HXTP_CAPABILITY_H
+#ifndef CAPABILITY_H
+#define CAPABILITY_H
 
 #include "Types.h"
 #include "Errors.h"
@@ -42,23 +42,23 @@ public:
      * Look up a capability by action name.
      * @param action     Action string from command
      * @param out_entry  Receives pointer to entry (if found)
-     * @return           HxtpError::OK if found, CAPABILITY_NOT_REGISTERED otherwise
+     * @return           Error::OK if found, CAPABILITY_NOT_REGISTERED otherwise
      */
-    HxtpError lookup_by_action(const char* action, const HxtpCapabilityEntry** out_entry) const;
+    Error lookup_by_action(const char* action, const CapabilityEntry** out_entry) const;
 
     /**
      * Look up a capability by ID.
      */
-    HxtpError lookup_by_id(uint16_t id, const HxtpCapabilityEntry** out_entry) const;
+    Error lookup_by_id(uint16_t id, const CapabilityEntry** out_entry) const;
 
     /**
      * Execute a command. Looks up the capability and calls its handler.
      * @param action      Action string
      * @param params_json Raw params JSON
      * @param params_len  Length of params JSON
-     * @return            HxtpCapabilityResult
+     * @return            CapabilityResult
      */
-    HxtpCapabilityResult execute(
+    CapabilityResult execute(
         const char* action,
         const char* params_json,
         uint32_t params_len
@@ -67,10 +67,10 @@ public:
     size_t count() const { return count_; }
 
 private:
-    HxtpCapabilityEntry entries_[HXTP_MAX_CAPABILITIES];
+    CapabilityEntry entries_[MaxCapabilities];
     size_t              count_;
 };
 
 } /* namespace hxtp */
 
-#endif /* HXTP_CAPABILITY_H */
+#endif /* CAPABILITY_H */

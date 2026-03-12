@@ -3,7 +3,7 @@
  * Public API — Single-Entry Header
  *
  * Usage:
- *   #include <HXTP.h>
+ *   #include "Hxtp.h"
  *
  * This is the ONLY header users should include.
  * All internal headers are resolved automatically.
@@ -12,8 +12,8 @@
  * SDK-License-Identifier: MIT
  */
 
-#ifndef HXTP_H
-#define HXTP_H
+#ifndef Hxtp_h
+#define Hxtp_h
 
 /* ── SDK Configuration & Types ───────────────────────────────────────── */
 #include "Config.h"
@@ -21,6 +21,6 @@
 #include "Errors.h"
 
 /* ── Client API ──────────────────────────────────────────────────────── */
-#include "HXTPClient.h"
+#include "Client.h"
 
-#endif /* HXTP_H */
+#endif /* Hxtp_h */

@@ -1,43 +1,47 @@
 /*
- * HXTP Micro SDK - Telemetry Device Example
+ * HXTP Micro SDK - Telemetry Device Example (Zero-Config)
  * 
- * Demonstrates publishing telemetry back to the cloud.
+ * Demonstrates:
+ *   1. Zero-config provisioning flow.
+ *   2. Periodically publishing sensor telemetry to the cloud.
+ *   3. Non-blocking state management.
+ * 
+ * Copyright (c) 2026 Hestia Labs
+ * SDK-License-Identifier: MIT
  */
 
 #include <Arduino.h>
-#include <HXTP.h>
+#include "Hxtp.h"
 
-// ---- WiFi Configuration ----
-static const char* WIFI_SSID     = "YOUR_WIFI_SSID";
-static const char* WIFI_PASS     = "YOUR_WIFI_PASSWORD";
-
-// ---- HxTP Provisioning Payload ----
-static const char* API_BASE_URL  = "https://api.hestialabs.com/api/v1";
-static const char* DEVICE_ID     = "d123456789abcdef0123456789abcdef";
-static const char* TENANT_ID     = "t-987654321";
-static const char* DEVICE_SECRET = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
-
-hxtp::HXTPClient* hxtpClient = nullptr;
+// ---- Global HXTP Client ----
+hxtp::Client* hxtpClient = nullptr;
 
 unsigned long lastTelemetryMs = 0;
-const unsigned long TELEMETRY_INTERVAL = 10000; // 10 seconds
+const unsigned long TELEMETRY_INTERVAL = 30000; // Publish every 30 seconds
+
+// ---- SDK Event Callbacks ----
+void onHxtpStateChange(hxtp::ClientState oldState, hxtp::ClientState newState, void*) {
+    Serial.printf("[HXTP] State: %s\n", hxtpClient->stateStr());
+}
 
 void setup() {
     Serial.begin(115200);
+    delay(1000);
+    Serial.println("\n--- HxTP Telemetry Device Starting ---");
 
-    HXTPConfig config;
-    config.wifi_ssid        = WIFI_SSID;
-    config.wifi_password    = WIFI_PASS;
-    config.api_base_url     = API_BASE_URL;
-    config.device_id        = DEVICE_ID;
-    config.tenant_id        = TENANT_ID;
-    config.device_secret    = DEVICE_SECRET;
-    config.device_type      = "sensor-node";
-    config.firmware_version = "1.0.0";
-    config.verify_server    = false; 
+    // 1. Configure the HXTP Client
+    Config config;
+    config.device_type      = "telemetry-node";
+    config.firmware_version = "1.0.5";
+    config.verify_server    = true; 
 
-    hxtpClient = new hxtp::HXTPClient(config);
+    // 2. Initialize the Client
+    hxtpClient = new hxtp::Client(config);
+    hxtpClient->onStateChange(onHxtpStateChange, nullptr);
+
     hxtpClient->begin();
+
+    // 3. Start Connection Lifecycle
     hxtpClient->connect();
 }
 
@@ -45,25 +49,24 @@ void loop() {
     if (hxtpClient) {
         hxtpClient->loop();
         
-        // Only publish telemetry when the SDK is fully READY and connected
-        if (hxtpClient->isConnected() && (millis() - lastTelemetryMs >= TELEMETRY_INTERVAL)) {
-            lastTelemetryMs = millis();
-            
-            // Read some sensor data
-            float temperature = 24.5 + (random(-10, 10) / 10.0);
-            float humidity = 45.0 + (random(-50, 50) / 10.0);
-            
-            char telemetryPayload[128];
-            snprintf(telemetryPayload, sizeof(telemetryPayload), 
-                "{\"temperature\":%.2f,\"humidity\":%.2f}", 
-                temperature, humidity);
+        // 4. Publish telemetry when READY
+        if (hxtpClient->state() == hxtp::ClientState::READY) {
+            if (millis() - lastTelemetryMs >= TELEMETRY_INTERVAL) {
+                lastTelemetryMs = millis();
                 
-            Serial.printf("[Sensor] Publishing telemetry: %s\n", telemetryPayload);
-            
-            // The SDK handles packaging and signing the payload
-            HxtpError err = hxtpClient->publishTelemetry(telemetryPayload, strlen(telemetryPayload));
-            if (err != HxtpError::OK) {
-                Serial.printf("[Sensor] Failed to publish: %d\n", static_cast<int>(err));
+                // Simulate sensor reading
+                float temp = 22.0 + (random(0, 50) / 10.0);
+                float hum  = 40.0 + (random(0, 200) / 10.0);
+                
+                char payload[128];
+                snprintf(payload, sizeof(payload), 
+                         "{\"temperature\":%.2f,\"humidity\":%.2f,\"status\":\"nominal\"}", 
+                         temp, hum);
+                    
+                Serial.printf("[Sensor] Data: %s\n", payload);
+                
+                // publishTelemetry handles framing, signing, and sequence management
+                hxtpClient->publishTelemetry(payload, strlen(payload));
             }
         }
     }

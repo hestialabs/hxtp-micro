@@ -14,8 +14,8 @@
  * SDK-License-Identifier: MIT
  */
 
-#ifndef HXTP_PLATFORM_ESP8266_H
-#define HXTP_PLATFORM_ESP8266_H
+#ifndef PLATFORM_ESP8266_H
+#define PLATFORM_ESP8266_H
 
 #include "Types.h"
 
@@ -49,7 +49,7 @@ static bool eeprom_storage_init() {
 /* ── Read Secret ────────────────────────────────────────────────────── */
 
 static bool eeprom_read_secret(uint8_t* out, size_t len) {
-    if (!s_eeprom_initialized || len != HXTP_SECRET_LEN) return false;
+    if (!s_eeprom_initialized || len != SecretLen) return false;
 
     uint8_t magic = EEPROM.read(EEPROM_MAGIC_OFFSET);
     if (magic != EEPROM_MAGIC_VALUE) return false;
@@ -63,7 +63,7 @@ static bool eeprom_read_secret(uint8_t* out, size_t len) {
 /* ── Write Secret ───────────────────────────────────────────────────── */
 
 static bool eeprom_write_secret(const uint8_t* data, size_t len) {
-    if (!s_eeprom_initialized || len != HXTP_SECRET_LEN) return false;
+    if (!s_eeprom_initialized || len != SecretLen) return false;
 
     EEPROM.write(EEPROM_MAGIC_OFFSET, EEPROM_MAGIC_VALUE);
     for (size_t i = 0; i < len; ++i) {
@@ -119,19 +119,19 @@ static bool eeprom_write_sequence(const char* key, int64_t value) {
 /* ── Read Device ID ─────────────────────────────────────────────────── */
 
 static bool eeprom_read_device_id(char* out, size_t max_len) {
-    if (!s_eeprom_initialized || max_len < HXTP_DEVICE_ID_LEN + 1) return false;
+    if (!s_eeprom_initialized || max_len < DeviceIdLen + 1) return false;
 
     uint8_t magic = EEPROM.read(EEPROM_MAGIC_OFFSET);
     if (magic != EEPROM_MAGIC_VALUE) return false;
 
-    for (size_t i = 0; i < HXTP_DEVICE_ID_LEN; ++i) {
+    for (size_t i = 0; i < DeviceIdLen; ++i) {
         out[i] = static_cast<char>(EEPROM.read(EEPROM_DEVID_OFFSET + i));
     }
-    out[HXTP_DEVICE_ID_LEN] = '\0';
+    out[DeviceIdLen] = '\0';
 
     /* Validate: check that it's not all zeros */
     bool all_zero = true;
-    for (size_t i = 0; i < HXTP_DEVICE_ID_LEN; ++i) {
+    for (size_t i = 0; i < DeviceIdLen; ++i) {
         if (out[i] != '\0' && out[i] != 0) { all_zero = false; break; }
     }
     return !all_zero;
@@ -144,13 +144,13 @@ static bool eeprom_write_device_id(const char* id) {
 
     EEPROM.write(EEPROM_MAGIC_OFFSET, EEPROM_MAGIC_VALUE);
     size_t idlen = strlen(id);
-    if (idlen > HXTP_DEVICE_ID_LEN) idlen = HXTP_DEVICE_ID_LEN;
+    if (idlen > DeviceIdLen) idlen = DeviceIdLen;
 
     for (size_t i = 0; i < idlen; ++i) {
         EEPROM.write(EEPROM_DEVID_OFFSET + i, static_cast<uint8_t>(id[i]));
     }
     /* Pad with nulls */
-    for (size_t i = idlen; i < HXTP_DEVICE_ID_LEN; ++i) {
+    for (size_t i = idlen; i < DeviceIdLen; ++i) {
         EEPROM.write(EEPROM_DEVID_OFFSET + i, 0);
     }
 
@@ -184,8 +184,8 @@ static int64_t esp8266_get_epoch_ms() {
 
 /* ── Adapter Factories ──────────────────────────────────────────────── */
 
-inline HxtpStorageAdapter create_eeprom_adapter() {
-    HxtpStorageAdapter adapter;
+inline StorageAdapter create_eeprom_adapter() {
+    StorageAdapter adapter;
     adapter.init            = eeprom_storage_init;
     adapter.read_secret     = eeprom_read_secret;
     adapter.write_secret    = eeprom_write_secret;
@@ -196,8 +196,8 @@ inline HxtpStorageAdapter create_eeprom_adapter() {
     return adapter;
 }
 
-inline HxtpPlatformCrypto create_esp8266_crypto() {
-    HxtpPlatformCrypto pc;
+inline PlatformCrypto create_esp8266_crypto() {
+    PlatformCrypto pc;
     pc.random_bytes = esp8266_random_bytes;
     pc.get_time_ms  = esp8266_get_time_ms;
     pc.get_epoch_ms = esp8266_get_epoch_ms;
@@ -208,4 +208,4 @@ inline HxtpPlatformCrypto create_esp8266_crypto() {
 } /* namespace hxtp */
 
 #endif /* ESP8266 */
-#endif /* HXTP_PLATFORM_ESP8266_H */
+#endif /* PLATFORM_ESP8266_H */

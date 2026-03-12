@@ -2,7 +2,7 @@
  * HXTP Embedded SDK v1.0
  * ESP32 Platform — NVS Storage Adapter
  *
- * Implements HxtpStorageAdapter using ESP32 Non-Volatile Storage (NVS).
+ * Implements StorageAdapter using ESP32 Non-Volatile Storage (NVS).
  *
  * Keys stored:
  *   hxtp_secret   → 32-byte device secret (binary)
@@ -13,8 +13,8 @@
  * SDK-License-Identifier: MIT
  */
 
-#ifndef HXTP_STORAGE_NVS_H
-#define HXTP_STORAGE_NVS_H
+#ifndef STORAGE_NVS_H
+#define STORAGE_NVS_H
 
 #include "Types.h"
 
@@ -55,7 +55,7 @@ static bool nvs_storage_init() {
 /* ── Read Secret ────────────────────────────────────────────────────── */
 
 static bool nvs_read_secret(uint8_t* out, size_t len) {
-    if (!s_nvs_open || len != HXTP_SECRET_LEN) return false;
+    if (!s_nvs_open || len != SecretLen) return false;
 
     size_t required = len;
     esp_err_t err = nvs_get_blob(s_nvs_handle, NVS_KEY_SECRET, out, &required);
@@ -65,7 +65,7 @@ static bool nvs_read_secret(uint8_t* out, size_t len) {
 /* ── Write Secret ───────────────────────────────────────────────────── */
 
 static bool nvs_write_secret(const uint8_t* data, size_t len) {
-    if (!s_nvs_open || len != HXTP_SECRET_LEN) return false;
+    if (!s_nvs_open || len != SecretLen) return false;
 
     esp_err_t err = nvs_set_blob(s_nvs_handle, NVS_KEY_SECRET, data, len);
     if (err != ESP_OK) return false;
@@ -107,7 +107,7 @@ static bool nvs_write_sequence(const char* key, int64_t value) {
 /* ── Read Device ID ─────────────────────────────────────────────────── */
 
 static bool nvs_read_device_id(char* out, size_t max_len) {
-    if (!s_nvs_open || max_len < HXTP_DEVICE_ID_LEN + 1) return false;
+    if (!s_nvs_open || max_len < DeviceIdLen + 1) return false;
 
     size_t required = max_len;
     esp_err_t err = nvs_get_str(s_nvs_handle, NVS_KEY_DEV_ID, out, &required);
@@ -125,17 +125,63 @@ static bool nvs_write_device_id(const char* id) {
     return nvs_commit(s_nvs_handle) == ESP_OK;
 }
 
+/* ── Read Parameter ─────────────────────────────────────────────────── */
+
+static bool nvs_read_param(const char* key, char* out, size_t max_len) {
+    if (!s_nvs_open || !key || !out) return false;
+
+    size_t required = max_len;
+    esp_err_t err = nvs_get_str(s_nvs_handle, key, out, &required);
+    return (err == ESP_OK);
+}
+
+/* ── Write Parameter ────────────────────────────────────────────────── */
+
+static bool nvs_write_param(const char* key, const char* val) {
+    if (!s_nvs_open || !key || !val) return false;
+
+    esp_err_t err = nvs_set_str(s_nvs_handle, key, val);
+    if (err != ESP_OK) return false;
+
+    return nvs_commit(s_nvs_handle) == ESP_OK;
+}
+
+/* ── Read CA Cert ───────────────────────────────────────────────────── */
+
+static bool nvs_read_ca_cert(char* out, size_t max_len) {
+    if (!s_nvs_open || !out) return false;
+
+    size_t required = max_len;
+    esp_err_t err = nvs_get_str(s_nvs_handle, "ca_cert", out, &required);
+    return (err == ESP_OK);
+}
+
+/* ── Write CA Cert ──────────────────────────────────────────────────── */
+
+static bool nvs_write_ca_cert(const char* cert) {
+    if (!s_nvs_open || !cert) return false;
+
+    esp_err_t err = nvs_set_str(s_nvs_handle, "ca_cert", cert);
+    if (err != ESP_OK) return false;
+
+    return nvs_commit(s_nvs_handle) == ESP_OK;
+}
+
 /* ── Storage Adapter Instance ───────────────────────────────────────── */
 
-inline HxtpStorageAdapter create_nvs_adapter() {
-    HxtpStorageAdapter adapter;
-    adapter.init           = nvs_storage_init;
-    adapter.read_secret    = nvs_read_secret;
-    adapter.write_secret   = nvs_write_secret;
-    adapter.read_sequence  = nvs_read_sequence;
-    adapter.write_sequence = nvs_write_sequence;
-    adapter.read_device_id = nvs_read_device_id;
+inline StorageAdapter create_nvs_adapter() {
+    StorageAdapter adapter;
+    adapter.init            = nvs_storage_init;
+    adapter.read_secret     = nvs_read_secret;
+    adapter.write_secret    = nvs_write_secret;
+    adapter.read_sequence   = nvs_read_sequence;
+    adapter.write_sequence  = nvs_write_sequence;
+    adapter.read_device_id  = nvs_read_device_id;
     adapter.write_device_id = nvs_write_device_id;
+    adapter.read_param      = nvs_read_param;
+    adapter.write_param     = nvs_write_param;
+    adapter.read_ca_cert    = nvs_read_ca_cert;
+    adapter.write_ca_cert   = nvs_write_ca_cert;
     return adapter;
 }
 
@@ -143,4 +189,4 @@ inline HxtpStorageAdapter create_nvs_adapter() {
 } /* namespace hxtp */
 
 #endif /* ESP32 */
-#endif /* HXTP_STORAGE_NVS_H */
+#endif /* STORAGE_NVS_H */

@@ -39,8 +39,8 @@
  * SDK-License-Identifier: MIT
  */
 
-#ifndef HXTP_CONFIG_H
-#define HXTP_CONFIG_H
+#ifndef CONFIG_H
+#define CONFIG_H
 
 /* ── SDK Version ────────────────────────────────────────────────────── */
 
@@ -131,40 +131,40 @@
  *   Tradeoff: smaller cache = shorter replay protection window.
  *   Minimum safe value: 8 (protects ~80 seconds at 10 msg/s)
  */
-#ifndef HXTP_NONCE_CACHE_SIZE_OVERRIDE
+#ifndef NonceCacheSizeOverride
     #if defined(HXTP_CONSTRAINED)
-        #define HXTP_NONCE_CACHE_SIZE_OVERRIDE  16
+        #define NonceCacheSizeOverride  16
     #elif defined(HXTP_LITE)
-        #define HXTP_NONCE_CACHE_SIZE_OVERRIDE  32
+        #define NonceCacheSizeOverride  32
     #endif
-    /* else: uses HXTP_NONCE_CACHE_SIZE from Types.h (64) */
+    /* else: uses NonceCacheSize from Types.h (64) */
 #endif
 
 /*
  * Frame buffer size default.
  *   Default: 4096 (ESP32), 1536 (CONSTRAINED)
- *   Must be >= HXTP_HEADER_SIZE + minimum JSON envelope (~200 bytes).
+ *   Must be >= HeaderSize + minimum JSON envelope (~200 bytes).
  */
-#ifndef HXTP_FRAME_BUF_OVERRIDE
+#ifndef FrameBufOverride
     #if defined(HXTP_CONSTRAINED)
-        #define HXTP_FRAME_BUF_OVERRIDE  1536
+        #define FrameBufOverride  1536
     #elif defined(HXTP_LITE)
-        #define HXTP_FRAME_BUF_OVERRIDE  2048
+        #define FrameBufOverride  2048
     #endif
-    /* else: uses HXTP_FRAME_BUF_DEFAULT from Types.h (4096) */
+    /* else: uses FrameBufDefault from Types.h (4096) */
 #endif
 
 /*
  * Maximum capabilities.
  *   Default: 32 (ESP32), 8 (CONSTRAINED)
  */
-#ifndef HXTP_MAX_CAPABILITIES_OVERRIDE
+#ifndef MaxCapabilitiesOverride
     #if defined(HXTP_CONSTRAINED)
-        #define HXTP_MAX_CAPABILITIES_OVERRIDE  8
+        #define MaxCapabilitiesOverride  8
     #elif defined(HXTP_LITE)
-        #define HXTP_MAX_CAPABILITIES_OVERRIDE  16
+        #define MaxCapabilitiesOverride  16
     #endif
-    /* else: uses HXTP_MAX_CAPABILITIES from Types.h (32) */
+    /* else: uses MaxCapabilities from Types.h (32) */
 #endif
 
 /* ── Security Invariants (compile-time assertions) ──────────────────── */
@@ -175,7 +175,7 @@
  * The 7-step validation pipeline runs identically on all tiers.
  * Constant-time signature comparison is mandatory on all tiers.
  */
-#define HXTP_SECURITY_HMAC_SHA256_MANDATORY     1
+#define SECURITY_HMAC_SHA256_MANDATORY     1
 #define HXTP_SECURITY_VALIDATION_7STEP          1
 #define HXTP_SECURITY_CONSTANT_TIME_SIG_CMP     1
 #define HXTP_SECURITY_NO_PLAINTEXT_MODE         1
@@ -198,4 +198,4 @@
     #define HXTP_ESP8266_CONSTRAINED 1
 #endif
 
-#endif /* HXTP_CONFIG_H */
+#endif /* CONFIG_H */

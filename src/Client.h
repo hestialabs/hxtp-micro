@@ -3,7 +3,7 @@
  * Arduino Client Wrapper — Header
  *
  * High-level API for Arduino sketches:
- *   HXTPClient client(config);
+ *   Client client(config);
  *   client.begin();
  *   client.registerCapability(1, "set_pin", handler);
  *   client.connect();
@@ -15,8 +15,8 @@
  * SDK-License-Identifier: MIT
  */
 
-#ifndef HXTP_CLIENT_H
-#define HXTP_CLIENT_H
+#ifndef CLIENT_H
+#define CLIENT_H
 
 #include "Config.h"
 #include "Types.h"
@@ -33,12 +33,12 @@
 #ifdef ESP32
     #include <WiFi.h>
     #include <WiFiClientSecure.h>
-    #include "PlatformESP32.h"
-    #include "StorageNVS.h"
+    #include "Esp32.h"
+    #include "Nvs.h"
 #elif defined(ESP8266)
     #include <ESP8266WiFi.h>
     #include <WiFiClientSecure.h>
-    #include "PlatformESP8266.h"
+    #include "Esp8266.h"
 #endif
 
 #ifdef ESP32
@@ -47,45 +47,49 @@
 #include <ESP8266HTTPClient.h>
 #endif
 
+#include "Provisioning.h"
+#include "Bootstrap.h"
+
 namespace hxtp {
 
 /* ── Connection State Machine ───────────────────────────────────────── */
 
-enum class HxtpClientState : uint8_t {
+enum class ClientState : uint8_t {
     IDLE            = 0,    /* Not started */
-    WIFI_CONNECTING = 1,    /* Connecting to WiFi */
-    WIFI_CONNECTED  = 2,    /* WiFi up, not yet MQTT */
-    TIME_SYNCING    = 3,    /* Waiting for NTP */
-    BOOTSTRAPPING   = 4,    /* Fetching config via HTTP */
-    MQTT_LINKING    = 5,    /* Connecting to MQTT broker */
-    MQTT_LINKED     = 6,    /* MQTT up, subscribing */
-    SUBSCRIBING     = 7,    /* Subscribing to topics */
-    HELLO_SENT      = 8,    /* HELLO handshake sent */
-    READY           = 9,    /* Fully operational */
-    RECONNECTING    = 10,   /* Lost connection, retrying */
-    ERROR_STATE     = 11,   /* Fatal error */
+    PROVISIONING    = 1,    /* AP + WebServer setup */
+    WIFI_CONNECTING = 2,    /* Connecting to WiFi */
+    WIFI_CONNECTED  = 3,    /* WiFi up, not yet MQTT */
+    TIME_SYNCING    = 4,    /* Waiting for NTP */
+    BOOTSTRAPPING   = 5,    /* Fetching config via HTTP */
+    MQTT_LINKING    = 6,    /* Connecting to MQTT broker */
+    MQTT_LINKED     = 7,    /* MQTT up, subscribing */
+    SUBSCRIBING     = 8,    /* Subscribing to topics */
+    HELLO_SENT      = 9,    /* HELLO handshake sent */
+    READY           = 10,   /* Fully operational */
+    RECONNECTING    = 11,   /* Lost connection, retrying */
+    ERROR_STATE     = 12,   /* Fatal error */
 };
 
 /* ── Callback Types ─────────────────────────────────────────────────── */
 
-typedef void (*HxtpStateChangeCallback)(HxtpClientState old_state, HxtpClientState new_state, void* ctx);
-typedef void (*HxtpErrorCallback)(HxtpError err, const char* msg, void* ctx);
+typedef void (*StateCallback)(ClientState old_state, ClientState new_state, void* ctx);
+typedef void (*ErrorCallback)(Error err, const char* msg, void* ctx);
 
-/* ── HXTPClient ─────────────────────────────────────────────────────── */
+/* ── Client ─────────────────────────────────────────────────────── */
 
-class HXTPClient {
+class Client {
 public:
     /**
      * Construct with configuration.
      */
-    explicit HXTPClient(const HXTPConfig& config);
+    explicit Client(const Config& config);
 
     /**
      * Initialize all subsystems.
      * Call once in Arduino setup().
-     * @return HxtpError::OK or initialization error
+     * @return Error::OK or initialization error
      */
-    HxtpError begin();
+    Error begin();
 
     /**
      * Register a device capability.
@@ -118,36 +122,37 @@ public:
      * Publish a state report.
      * @param state_json  JSON object string (e.g., "{\"pin\":1}")
      * @param state_len   Length of JSON string
-     * @return            HxtpError::OK or error
+     * @return            Error::OK or error
      */
-    HxtpError publishState(const char* state_json, uint32_t state_len);
+    Error publishState(const char* state_json, uint32_t state_len);
 
     /**
      * Publish telemetry data.
      */
-    HxtpError publishTelemetry(const char* json, uint32_t json_len);
+    Error publishTelemetry(const char* json, uint32_t json_len);
 
     /* ── State & Status ──────────────────────────────── */
 
-    HxtpClientState state() const { return state_; }
-    bool isConnected() const { return state_ == HxtpClientState::READY; }
+    ClientState state() const { return state_; }
+    bool isConnected() const { return state_ == ClientState::READY; }
     bool isWiFiConnected() const;
     bool isMqttConnected();
     const char* stateStr() const;
 
     /* ── Callbacks ────────────────────────────────────── */
 
-    void onStateChange(HxtpStateChangeCallback cb, void* ctx = nullptr);
-    void onError(HxtpErrorCallback cb, void* ctx = nullptr);
+    void onStateChange(StateCallback cb, void* ctx = nullptr);
+    void onError(ErrorCallback cb, void* ctx = nullptr);
 
     /* ── Accessors ────────────────────────────────────── */
 
-    HxtpCore& core() { return core_; }
+    Core& core() { return core_; }
     const char* deviceId() const { return core_.device_id(); }
     const char* tenantId() const { return core_.tenant_id(); }
 
 private:
     /* ── State Machine Handlers ────────────────────────── */
+    void tick_provisioning();
     void tick_wifi_connecting();
     void tick_time_syncing();
     void tick_bootstrapping();
@@ -168,21 +173,25 @@ private:
     bool subscribe_topics();
 
     /* ── State Transition ─────────────────────────────── */
-    void set_state(HxtpClientState new_state);
+    void set_state(ClientState new_state);
 
     /* ── Config ──────────────────────────────────────── */
-    HXTPConfig  config_;
+    Config  config_;
 
     /* ── Fetched Bootstrapped Config ─────────────────── */
     char        mqtt_host_[64];
     uint16_t    mqtt_port_;
     
     /* ── Core Engine ─────────────────────────────────── */
-    HxtpCore    core_;
+    Core    core_;
 
     /* ── Platform Adapters ───────────────────────────── */
-    HxtpStorageAdapter   storage_adapter_;
-    HxtpPlatformCrypto   platform_crypto_;
+    StorageAdapter   storage_adapter_;
+    PlatformCrypto   platform_crypto_;
+
+    /* ── Provisioning & Bootstrap ────────────────────── */
+    Provisioning         provisioning_;
+    Bootstrap            bootstrap_;
 
     /* ── Network ─────────────────────────────────────── */
 #ifdef ESP8266
@@ -198,7 +207,7 @@ private:
 #endif
 
     /* ── State Machine ───────────────────────────────── */
-    HxtpClientState      state_;
+    ClientState      state_;
 
     /* ── Timers ──────────────────────────────────────── */
     uint32_t  last_heartbeat_ms_;
@@ -207,14 +216,14 @@ private:
     uint32_t  state_enter_ms_;
 
     /* ── Callbacks ───────────────────────────────────── */
-    HxtpStateChangeCallback  state_change_cb_;
+    StateCallback  state_change_cb_;
     void*                    state_change_ctx_;
-    HxtpErrorCallback        error_cb_;
+    ErrorCallback        error_cb_;
     void*                    error_ctx_;
 
     /* ── Frame Buffers (stack, not heap) ─────────────── */
     /* Outbound buffer shared across sends */
-    uint8_t  tx_buf_[HXTP_FRAME_BUF_DEFAULT];
+    uint8_t  tx_buf_[FrameBufDefault];
     /* Inbound ACK buffer — constrained on ESP8266 */
 #if defined(HXTP_CONSTRAINED)
     uint8_t  ack_buf_[512];
@@ -223,9 +232,9 @@ private:
 #endif
 
     /* ── Singleton for static callback routing ───────── */
-    static HXTPClient* s_instance_;
+    static Client* s_instance_;
 };
 
 } /* namespace hxtp */
 
-#endif /* HXTP_CLIENT_H */
+#endif /* CLIENT_H */

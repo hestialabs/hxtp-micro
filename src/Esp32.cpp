@@ -10,7 +10,7 @@
 
 #ifdef ESP32
 
-#include "PlatformESP32.h"
+#include "Esp32.h"
 #include <esp_sntp.h>
 #include <cstring>
 

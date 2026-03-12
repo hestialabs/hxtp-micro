@@ -9,23 +9,25 @@
  * SDK-License-Identifier: MIT
  */
 
-#include "HXTPClient.h"
+#include "Client.h"
 #include <cstring>
 
 namespace hxtp {
 
 /* ── Static Singleton (for PubSubClient callback routing) ───────────── */
-HXTPClient* HXTPClient::s_instance_ = nullptr;
+Client* Client::s_instance_ = nullptr;
 
 /* ── Constructor ────────────────────────────────────────────────────── */
 
-HXTPClient::HXTPClient(const HXTPConfig& config)
+Client::Client(const Config& config)
     : config_(config)
+    , provisioning_(&storage_adapter_)
+    , bootstrap_(&core_, &tls_client_)
     , mqtt_client_(tls_client_)
 #ifdef ESP8266
     , x509_ca_(nullptr)
 #endif
-    , state_(HxtpClientState::IDLE)
+    , state_(ClientState::IDLE)
     , last_heartbeat_ms_(0)
     , last_reconnect_ms_(0)
     , reconnect_delay_ms_(1000)
@@ -44,7 +46,7 @@ HXTPClient::HXTPClient(const HXTPConfig& config)
 
 /* ── registerCapability() ────────────────────────────────────────────── */
 
-bool HXTPClient::registerCapability(uint16_t id, const char* action,
+bool Client::registerCapability(uint16_t id, const char* action,
                                     CapabilityHandler handler, void* user_ctx)
 {
     return core_.capabilities().register_capability(id, action, handler, user_ctx);
@@ -52,7 +54,7 @@ bool HXTPClient::registerCapability(uint16_t id, const char* action,
 
 /* ── begin() ────────────────────────────────────────────────────────── */
 
-HxtpError HXTPClient::begin() {
+Error Client::begin() {
     /* ── Create platform adapters ────────────────────── */
 #ifdef ESP32
     storage_adapter_ = platform::create_nvs_adapter();
@@ -65,18 +67,18 @@ HxtpError HXTPClient::begin() {
 #endif
 
     /* ── Initialize core engine ──────────────────────── */
-    HxtpError err = core_.init(&config_, &storage_adapter_, &platform_crypto_);
-    if (err != HxtpError::OK) {
+    Error err = core_.init(&config_, &storage_adapter_, &platform_crypto_);
+    if (err != Error::OK) {
         if (error_cb_) error_cb_(err, "Core init failed", error_ctx_);
-        set_state(HxtpClientState::ERROR_STATE);
+        set_state(ClientState::ERROR_STATE);
         return err;
     }
 
     /* ── Configure MQTT ──────────────────────────────── */
     // Server is set later after bootstrap resolves mqtt_host_
     mqtt_client_.setCallback(mqtt_callback_static);
-    mqtt_client_.setBufferSize(config_.frame_buf_size > 0 ? config_.frame_buf_size : HXTP_FRAME_BUF_DEFAULT);
-    mqtt_client_.setKeepAlive(HXTP_MQTT_KEEPALIVE_S);
+    mqtt_client_.setBufferSize(config_.frame_buf_size > 0 ? config_.frame_buf_size : FrameBufDefault);
+    mqtt_client_.setKeepAlive(MqttKeepaliveSec);
 
     /* ── Configure TLS ───────────────────────────────── */
     if (config_.ca_cert) {
@@ -97,10 +99,10 @@ HxtpError HXTPClient::begin() {
         tls_client_.setInsecure();
 #else
         /* HXTP_RELEASE / HXTP_CONSTRAINED: refuse to run without cert */
-        if (error_cb_) error_cb_(HxtpError::CRYPTO_INIT_FAILED,
+        if (error_cb_) error_cb_(Error::CRYPTO_INIT_FAILED,
                                  "TLS: no CA cert in release build", error_ctx_);
-        set_state(HxtpClientState::ERROR_STATE);
-        return HxtpError::CRYPTO_INIT_FAILED;
+        set_state(ClientState::ERROR_STATE);
+        return Error::CRYPTO_INIT_FAILED;
 #endif
     }
 
@@ -109,95 +111,146 @@ HxtpError HXTPClient::begin() {
     tls_client_.setBufferSizes(1536, 512);
 #endif
 
-    return HxtpError::OK;
+    return Error::OK;
 }
 
 /* ── connect() ──────────────────────────────────────────────────────── */
 
-void HXTPClient::connect() {
-    if (state_ == HxtpClientState::ERROR_STATE) return;
+void Client::connect() {
+    if (state_ == ClientState::ERROR_STATE) return;
+
+    /* ── 1. Check if we need provisioning ──────────────── */
+    char saved_ssid[64] = {0};
+    bool has_wifi = (config_.wifi_ssid && config_.wifi_ssid[0] != '\0');
+    
+    if (!has_wifi && storage_adapter_.read_param) {
+        has_wifi = storage_adapter_.read_param("wifi_ssid", saved_ssid, sizeof(saved_ssid));
+    }
+
+    if (!has_wifi) {
+        provisioning_.begin();
+        set_state(ClientState::PROVISIONING);
+        return;
+    }
+
+    /* ── 2. Standard Connect Flow ──────────────────────── */
+    
+    /* Load Root CA for strict verification */
+    char ca_cert[4096];
+    if (storage_adapter_.read_ca_cert(ca_cert, sizeof(ca_cert))) {
+        tls_client_.setCACert(ca_cert);
+    } else if (config_.ca_cert) {
+        tls_client_.setCACert(config_.ca_cert);
+    } else if (config_.verify_server) {
+        /* Fail closed if verification requested but no cert found */
+        Serial.println("[HXTP] ERROR: TLS verification requested but no CA cert found.");
+        set_state(ClientState::ERROR_STATE);
+        return;
+    } else {
+        tls_client_.setInsecure();
+    }
 
     if (WiFi.status() == WL_CONNECTED) {
-        set_state(HxtpClientState::WIFI_CONNECTED);
+        set_state(ClientState::WIFI_CONNECTED);
     } else {
         WiFi.mode(WIFI_STA);
-        WiFi.begin(config_.wifi_ssid, config_.wifi_password);
-        set_state(HxtpClientState::WIFI_CONNECTING);
+        if (saved_ssid[0] != '\0') {
+            char saved_pass[64] = {0};
+            storage_adapter_.read_param("wifi_pass", saved_pass, sizeof(saved_pass));
+            WiFi.begin(saved_ssid, saved_pass);
+        } else {
+            WiFi.begin(config_.wifi_ssid, config_.wifi_password);
+        }
+        set_state(ClientState::WIFI_CONNECTING);
     }
 }
 
 /* ── loop() — Main State Machine ────────────────────────────────────── */
 
-void HXTPClient::loop() {
+void Client::loop() {
     switch (state_) {
-        case HxtpClientState::IDLE:
+        case ClientState::IDLE:
             break;
 
-        case HxtpClientState::WIFI_CONNECTING:
+        case ClientState::PROVISIONING:
+            tick_provisioning();
+            break;
+
+        case ClientState::WIFI_CONNECTING:
             tick_wifi_connecting();
             break;
 
-        case HxtpClientState::WIFI_CONNECTED:
-            set_state(HxtpClientState::TIME_SYNCING);
+        case ClientState::WIFI_CONNECTED:
+            set_state(ClientState::TIME_SYNCING);
             break;
 
-        case HxtpClientState::TIME_SYNCING:
+        case ClientState::TIME_SYNCING:
             tick_time_syncing();
             break;
 
-        case HxtpClientState::BOOTSTRAPPING:
+        case ClientState::BOOTSTRAPPING:
             tick_bootstrapping();
             break;
 
-        case HxtpClientState::MQTT_LINKING:
+        case ClientState::MQTT_LINKING:
             tick_mqtt_connecting();
             break;
 
-        case HxtpClientState::MQTT_LINKED:
-            set_state(HxtpClientState::SUBSCRIBING);
+        case ClientState::MQTT_LINKED:
+            set_state(ClientState::SUBSCRIBING);
             break;
 
-        case HxtpClientState::SUBSCRIBING:
+        case ClientState::SUBSCRIBING:
             tick_subscribing();
             break;
 
-        case HxtpClientState::HELLO_SENT:
+        case ClientState::HELLO_SENT:
             tick_hello();
             break;
 
-        case HxtpClientState::READY:
+        case ClientState::READY:
             tick_ready();
             break;
 
-        case HxtpClientState::RECONNECTING:
+        case ClientState::RECONNECTING:
             tick_reconnecting();
             break;
 
-        case HxtpClientState::ERROR_STATE:
+        case ClientState::ERROR_STATE:
             break;
     }
 }
 
 /* ── State Machine Tick Handlers ────────────────────────────────────── */
 
-void HXTPClient::tick_wifi_connecting() {
+void Client::tick_provisioning() {
+    provisioning_.loop();
+    if (provisioning_.isComplete()) {
+        /* Soft Reboot to pick up new NVS settings */
+        Serial.println("[HXTP] Provisioning done. Restarting...");
+        delay(1000);
+        ESP.restart();
+    }
+}
+
+void Client::tick_wifi_connecting() {
     if (WiFi.status() == WL_CONNECTED) {
-        set_state(HxtpClientState::WIFI_CONNECTED);
+        set_state(ClientState::WIFI_CONNECTED);
         return;
     }
 
     /* Timeout after 30 seconds */
     if (millis() - state_enter_ms_ > 30000) {
-        if (error_cb_) error_cb_(HxtpError::WIFI_CONNECT_FAILED, "WiFi timeout", error_ctx_);
-        set_state(HxtpClientState::RECONNECTING);
+        if (error_cb_) error_cb_(Error::WIFI_CONNECT_FAILED, "WiFi timeout", error_ctx_);
+        set_state(ClientState::RECONNECTING);
     }
 }
 
-void HXTPClient::tick_time_syncing() {
+void Client::tick_time_syncing() {
 #ifdef ESP32
     /* Use ESP32 SNTP helper */
     if (platform::esp32_sync_time("pool.ntp.org", 100)) {
-        set_state(HxtpClientState::BOOTSTRAPPING);
+        set_state(ClientState::BOOTSTRAPPING);
         return;
     }
 #else
@@ -207,7 +260,7 @@ void HXTPClient::tick_time_syncing() {
     struct tm ti;
     localtime_r(&tv.tv_sec, &ti);
     if (ti.tm_year > (2020 - 1900)) {
-        set_state(HxtpClientState::BOOTSTRAPPING);
+        set_state(ClientState::BOOTSTRAPPING);
         return;
     }
 
@@ -222,84 +275,35 @@ void HXTPClient::tick_time_syncing() {
     /* Timeout after 15 seconds */
     if (millis() - state_enter_ms_ > 15000) {
         /* Proceed anyway — timestamp validation may reject, but we try */
-        set_state(HxtpClientState::BOOTSTRAPPING);
+        set_state(ClientState::BOOTSTRAPPING);
     }
 }
 
-void HXTPClient::tick_bootstrapping() {
-    if (!config_.api_base_url || !config_.device_id) {
-        if (error_cb_) error_cb_(HxtpError::BOOTSTRAP_FAILED, "Missing api_base_url or device_id", error_ctx_);
-        set_state(HxtpClientState::ERROR_STATE);
-        return;
-    }
+void Client::tick_bootstrapping() {
+    /* Perform cloud discovery via signed HTTP request */
+    BootstrapConfig bcfg = bootstrap_.perform();
 
-    char url[256];
-    snprintf(url, sizeof(url), "%s/device/%s/bootstrap", config_.api_base_url, config_.device_id);
-
-    HTTPClient http;
-#ifdef ESP32
-    http.begin(tls_client_, url);
-#else
-    http.begin(tls_client_, url);
-#endif
-
-    int httpCode = http.GET();
-    if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED) {
-        String payload = http.getString();
+    if (bcfg.success) {
+        snprintf(mqtt_host_, sizeof(mqtt_host_), "%s", bcfg.mqtt_host);
+        mqtt_port_ = bcfg.mqtt_port;
         
-        // Naive JSON parse avoiding dynamic memory objects
-        // Look for "mqtt_endpoint":"mqtts://host:port"
-        // E.g. "mqtt_endpoint":"mqtts://cloud.hestialabs.in:8883"
-        int endpoint_idx = payload.indexOf("\"mqtt_endpoint\":\"");
-        if (endpoint_idx > 0) {
-            int start_idx = endpoint_idx + 17;
-            int end_idx = payload.indexOf("\"", start_idx);
-            if (end_idx > start_idx) {
-                String endpoint = payload.substring(start_idx, end_idx);
-                
-                // Parse mqtts://host:port
-                int proto_end = endpoint.indexOf("://");
-                int host_start = (proto_end > 0) ? proto_end + 3 : 0;
-                int port_start = endpoint.lastIndexOf(":");
-                
-                if (port_start > host_start) {
-                    String host = endpoint.substring(host_start, port_start);
-                    int port = endpoint.substring(port_start + 1).toInt();
-                    
-                    snprintf(mqtt_host_, sizeof(mqtt_host_), "%s", host.c_str());
-                    mqtt_port_ = (uint16_t)port;
-                    
-                    mqtt_client_.setServer(mqtt_host_, mqtt_port_);
-                    set_state(HxtpClientState::MQTT_LINKING);
-                } else {
-                    snprintf(mqtt_host_, sizeof(mqtt_host_), "%s", endpoint.substring(host_start).c_str());
-                    mqtt_port_ = 8883; // default TLS port
-                    mqtt_client_.setServer(mqtt_host_, mqtt_port_);
-                    set_state(HxtpClientState::MQTT_LINKING);
-                }
-            } else {
-                if (error_cb_) error_cb_(HxtpError::BOOTSTRAP_FAILED, "Invalid endpoint value", error_ctx_);
-                set_state(HxtpClientState::RECONNECTING);
-            }
-        } else {
-            // Assume defaults if endpoint not provided in JSON but bootstrap returned 200
-            snprintf(mqtt_host_, sizeof(mqtt_host_), "cloud.hestialabs.in");
-            mqtt_client_.setServer(mqtt_host_, mqtt_port_);
-            set_state(HxtpClientState::MQTT_LINKING);
-        }
+        /* Update config for later use */
+        const_cast<Config*>(&config_)->heartbeat_interval_seconds = bcfg.heartbeat_interval_seconds;
+
+        mqtt_client_.setServer(mqtt_host_, mqtt_port_);
+        set_state(ClientState::MQTT_LINKING);
+        
+        Serial.print("[HXTP] Bootstrap success. Broker: ");
+        Serial.println(mqtt_host_);
     } else {
-        if (error_cb_) {
-            String err = "Bootstrap HTTP Error: " + String(httpCode);
-            error_cb_(HxtpError::BOOTSTRAP_FAILED, err.c_str(), error_ctx_);
-        }
-        set_state(HxtpClientState::RECONNECTING);
+        if (error_cb_) error_cb_(Error::BOOTSTRAP_FAILED, "Secure bootstrap failed", error_ctx_);
+        set_state(ClientState::RECONNECTING);
     }
-    http.end();
 }
 
-void HXTPClient::tick_mqtt_connecting() {
+void Client::tick_mqtt_connecting() {
     if (mqtt_client_.connected()) {
-        set_state(HxtpClientState::MQTT_LINKED);
+        set_state(ClientState::MQTT_LINKED);
         return;
     }
 
@@ -316,62 +320,62 @@ void HXTPClient::tick_mqtt_connecting() {
 
     if (ok) {
         reconnect_delay_ms_ = 1000; /* Reset backoff on success */
-        set_state(HxtpClientState::MQTT_LINKED);
+        set_state(ClientState::MQTT_LINKED);
     } else {
         if (error_cb_) {
-            error_cb_(HxtpError::BROKER_CONNECT_FAILED, "MQTT connect failed", error_ctx_);
+            error_cb_(Error::BROKER_CONNECT_FAILED, "MQTT connect failed", error_ctx_);
         }
-        set_state(HxtpClientState::RECONNECTING);
+        set_state(ClientState::RECONNECTING);
     }
 }
 
-void HXTPClient::tick_subscribing() {
+void Client::tick_subscribing() {
     if (subscribe_topics()) {
-        set_state(HxtpClientState::HELLO_SENT);
+        set_state(ClientState::HELLO_SENT);
 
         /* Send HELLO */
         size_t out_len = 0;
-        HxtpError err = core_.build_hello(tx_buf_, sizeof(tx_buf_), &out_len);
-        if (err == HxtpError::OK && out_len > 0) {
+        Error err = core_.build_hello(tx_buf_, sizeof(tx_buf_), &out_len);
+        if (err == Error::OK && out_len > 0) {
             char topic[128];
-            core_.build_topic(HxtpChannel::HELLO, topic, sizeof(topic));
+            core_.build_topic(Channel::HELLO, topic, sizeof(topic));
             mqtt_client_.publish(topic, tx_buf_, out_len);
         }
     } else {
-        if (error_cb_) error_cb_(HxtpError::BROKER_SUBSCRIBE_FAILED, "Subscribe failed", error_ctx_);
-        set_state(HxtpClientState::RECONNECTING);
+        if (error_cb_) error_cb_(Error::BROKER_SUBSCRIBE_FAILED, "Subscribe failed", error_ctx_);
+        set_state(ClientState::RECONNECTING);
     }
 }
 
-void HXTPClient::tick_hello() {
+void Client::tick_hello() {
     mqtt_client_.loop();
 
     /* Transition to READY after a short delay to allow server to process HELLO.
      * Real production would wait for a HELLO_ACK, but protocol spec allows
      * immediate transition for embedded devices. */
     if (millis() - state_enter_ms_ > 2000) {
-        set_state(HxtpClientState::READY);
+        set_state(ClientState::READY);
     }
 }
 
-void HXTPClient::tick_ready() {
+void Client::tick_ready() {
     /* MQTT keepalive */
     if (!mqtt_client_.loop()) {
         /* Connection lost */
-        set_state(HxtpClientState::RECONNECTING);
+        set_state(ClientState::RECONNECTING);
         return;
     }
 
     /* Check WiFi */
     if (WiFi.status() != WL_CONNECTED) {
-        set_state(HxtpClientState::RECONNECTING);
+        set_state(ClientState::RECONNECTING);
         return;
     }
 
     /* Heartbeat timer */
     uint32_t now = millis();
-    uint32_t hb_interval = config_.heartbeat_interval_s * 1000;
-    if (hb_interval == 0) hb_interval = HXTP_HEARTBEAT_INTERVAL_S * 1000;
+    uint32_t hb_interval = config_.heartbeat_interval_seconds * 1000;
+    if (hb_interval == 0) hb_interval = HeartbeatIntervalSec * 1000;
 
     if (now - last_heartbeat_ms_ >= hb_interval) {
         send_heartbeat();
@@ -379,7 +383,7 @@ void HXTPClient::tick_ready() {
     }
 }
 
-void HXTPClient::tick_reconnecting() {
+void Client::tick_reconnecting() {
     uint32_t now = millis();
 
     /* Exponential backoff */
@@ -397,54 +401,54 @@ void HXTPClient::tick_reconnecting() {
     /* Check WiFi first */
     if (WiFi.status() != WL_CONNECTED) {
         WiFi.reconnect();
-        set_state(HxtpClientState::WIFI_CONNECTING);
+        set_state(ClientState::WIFI_CONNECTING);
     } else {
-        set_state(HxtpClientState::MQTT_LINKING);
+        set_state(ClientState::MQTT_LINKING);
     }
 }
 
 /* ── Heartbeat ──────────────────────────────────────────────────────── */
 
-void HXTPClient::send_heartbeat() {
+void Client::send_heartbeat() {
     size_t out_len = 0;
-    HxtpError err = core_.build_heartbeat(tx_buf_, sizeof(tx_buf_), &out_len);
-    if (err != HxtpError::OK || out_len == 0) return;
+    Error err = core_.build_heartbeat(tx_buf_, sizeof(tx_buf_), &out_len);
+    if (err != Error::OK || out_len == 0) return;
 
     char topic[128];
-    core_.build_topic(HxtpChannel::HEARTBEAT, topic, sizeof(topic));
+    core_.build_topic(Channel::HEARTBEAT, topic, sizeof(topic));
     mqtt_client_.publish(topic, tx_buf_, out_len);
 }
 
 /* ── MQTT Subscriptions ─────────────────────────────────────────────── */
 
-bool HXTPClient::subscribe_topics() {
+bool Client::subscribe_topics() {
     char topic[128];
 
     /* Subscribe to command channel */
-    core_.build_topic(HxtpChannel::CMD, topic, sizeof(topic));
-    if (!mqtt_client_.subscribe(topic, HXTP_MQTT_QOS)) return false;
+    core_.build_topic(Channel::CMD, topic, sizeof(topic));
+    if (!mqtt_client_.subscribe(topic, MqttQos)) return false;
 
     /* Subscribe to OTA channel */
-    core_.build_topic(HxtpChannel::OTA, topic, sizeof(topic));
-    if (!mqtt_client_.subscribe(topic, HXTP_MQTT_QOS)) return false;
+    core_.build_topic(Channel::OTA, topic, sizeof(topic));
+    if (!mqtt_client_.subscribe(topic, MqttQos)) return false;
 
     return true;
 }
 
 /* ── MQTT Message Handling ──────────────────────────────────────────── */
 
-void HXTPClient::mqtt_callback_static(char* topic, uint8_t* payload, unsigned int length) {
+void Client::mqtt_callback_static(char* topic, uint8_t* payload, unsigned int length) {
     if (s_instance_) {
         s_instance_->mqtt_on_message(topic, payload, length);
     }
 }
 
-void HXTPClient::mqtt_on_message(char* topic, uint8_t* payload, unsigned int length) {
+void Client::mqtt_on_message(char* topic, uint8_t* payload, unsigned int length) {
     if (!payload || length == 0) return;
 
     /* Process through core engine */
     size_t ack_len = 0;
-    HxtpError err = core_.process_inbound(
+    Error err = core_.process_inbound(
         topic,
         payload, static_cast<size_t>(length),
         ack_buf_, sizeof(ack_buf_), &ack_len
@@ -453,91 +457,91 @@ void HXTPClient::mqtt_on_message(char* topic, uint8_t* payload, unsigned int len
     /* If ACK was generated, publish it */
     if (ack_len > 0) {
         char ack_topic[128];
-        core_.build_topic(HxtpChannel::CMD_ACK, ack_topic, sizeof(ack_topic));
+        core_.build_topic(Channel::CMD_ACK, ack_topic, sizeof(ack_topic));
         mqtt_client_.publish(ack_topic, ack_buf_, ack_len);
     }
 
     /* Report errors */
-    if (err != HxtpError::OK && error_cb_) {
-        error_cb_(err, hxtp_error_str(err), error_ctx_);
+    if (err != Error::OK && error_cb_) {
+        error_cb_(err, error_str(err), error_ctx_);
     }
 }
 
 /* ── Publish APIs ───────────────────────────────────────────────────── */
 
-HxtpError HXTPClient::publishState(const char* state_json, uint32_t state_len) {
-    if (!isConnected()) return HxtpError::PROTOCOL_NOT_READY;
+Error Client::publishState(const char* state_json, uint32_t state_len) {
+    if (!isConnected()) return Error::PROTOCOL_NOT_READY;
 
     size_t out_len = 0;
-    HxtpError err = core_.build_state(state_json, state_len, tx_buf_, sizeof(tx_buf_), &out_len);
-    if (err != HxtpError::OK) return err;
+    Error err = core_.build_state(state_json, state_len, tx_buf_, sizeof(tx_buf_), &out_len);
+    if (err != Error::OK) return err;
 
     char topic[128];
-    core_.build_topic(HxtpChannel::STATE, topic, sizeof(topic));
+    core_.build_topic(Channel::STATE, topic, sizeof(topic));
 
     if (!mqtt_client_.publish(topic, tx_buf_, out_len)) {
-        return HxtpError::BROKER_PUBLISH_FAILED;
+        return Error::BROKER_PUBLISH_FAILED;
     }
 
-    return HxtpError::OK;
+    return Error::OK;
 }
 
-HxtpError HXTPClient::publishTelemetry(const char* json, uint32_t json_len) {
-    if (!isConnected()) return HxtpError::PROTOCOL_NOT_READY;
+Error Client::publishTelemetry(const char* json, uint32_t json_len) {
+    if (!isConnected()) return Error::PROTOCOL_NOT_READY;
 
     size_t out_len = 0;
-    HxtpError err = core_.build_telemetry(json, json_len, tx_buf_, sizeof(tx_buf_), &out_len);
-    if (err != HxtpError::OK) return err;
+    Error err = core_.build_telemetry(json, json_len, tx_buf_, sizeof(tx_buf_), &out_len);
+    if (err != Error::OK) return err;
 
     char topic[128];
-    core_.build_topic(HxtpChannel::TELEMETRY, topic, sizeof(topic));
+    core_.build_topic(Channel::TELEMETRY, topic, sizeof(topic));
 
     if (!mqtt_client_.publish(topic, tx_buf_, out_len)) {
-        return HxtpError::BROKER_PUBLISH_FAILED;
+        return Error::BROKER_PUBLISH_FAILED;
     }
 
-    return HxtpError::OK;
+    return Error::OK;
 }
 
 /* ── Disconnect ─────────────────────────────────────────────────────── */
 
-void HXTPClient::disconnect() {
+void Client::disconnect() {
     mqtt_client_.disconnect();
     WiFi.disconnect();
-    set_state(HxtpClientState::IDLE);
+    set_state(ClientState::IDLE);
 }
 
 /* ── State Helpers ──────────────────────────────────────────────────── */
 
-bool HXTPClient::isWiFiConnected() const {
+bool Client::isWiFiConnected() const {
     return WiFi.status() == WL_CONNECTED;
 }
 
-bool HXTPClient::isMqttConnected() {
+bool Client::isMqttConnected() {
     return mqtt_client_.connected();
 }
 
-const char* HXTPClient::stateStr() const {
+const char* Client::stateStr() const {
     switch (state_) {
-        case HxtpClientState::IDLE:             return "IDLE";
-        case HxtpClientState::WIFI_CONNECTING:  return "WIFI_CONNECTING";
-        case HxtpClientState::WIFI_CONNECTED:   return "WIFI_CONNECTED";
-        case HxtpClientState::TIME_SYNCING:     return "TIME_SYNCING";
-        case HxtpClientState::MQTT_LINKING:  return "MQTT_CONNECTING";
-        case HxtpClientState::MQTT_LINKED:   return "MQTT_CONNECTED";
-        case HxtpClientState::SUBSCRIBING:      return "SUBSCRIBING";
-        case HxtpClientState::HELLO_SENT:       return "HELLO_SENT";
-        case HxtpClientState::READY:            return "READY";
-        case HxtpClientState::RECONNECTING:     return "RECONNECTING";
-        case HxtpClientState::ERROR_STATE:      return "ERROR";
+        case ClientState::IDLE:             return "IDLE";
+        case ClientState::WIFI_CONNECTING:  return "WIFI_CONNECTING";
+        case ClientState::WIFI_CONNECTED:   return "WIFI_CONNECTED";
+        case ClientState::TIME_SYNCING:     return "TIME_SYNCING";
+        case ClientState::MQTT_LINKING:  return "MQTT_CONNECTING";
+        case ClientState::MQTT_LINKED:   return "MQTT_CONNECTED";
+        case ClientState::SUBSCRIBING:      return "SUBSCRIBING";
+        case ClientState::HELLO_SENT:       return "HELLO_SENT";
+        case ClientState::READY:            return "READY";
+        case ClientState::RECONNECTING:     return "RECONNECTING";
+        case ClientState::ERROR_STATE:      return "ERROR";
         default:                                return "UNKNOWN";
     }
 }
 
-void HXTPClient::set_state(HxtpClientState new_state) {
+void Client::set_state(ClientState new_state) {
     if (new_state == state_) return;
 
-    HxtpClientState old = state_;
+    ClientState old = state_;
     state_ = new_state;
     state_enter_ms_ = millis();
 
@@ -546,12 +550,12 @@ void HXTPClient::set_state(HxtpClientState new_state) {
     }
 }
 
-void HXTPClient::onStateChange(HxtpStateChangeCallback cb, void* ctx) {
+void Client::onStateChange(StateCallback cb, void* ctx) {
     state_change_cb_ = cb;
     state_change_ctx_ = ctx;
 }
 
-void HXTPClient::onError(HxtpErrorCallback cb, void* ctx) {
+void Client::onError(ErrorCallback cb, void* ctx) {
     error_cb_ = cb;
     error_ctx_ = ctx;
 }

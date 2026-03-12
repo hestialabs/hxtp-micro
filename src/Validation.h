@@ -19,8 +19,8 @@
  * SDK-License-Identifier: MIT
  */
 
-#ifndef HXTP_VALIDATION_H
-#define HXTP_VALIDATION_H
+#ifndef VALIDATION_H
+#define VALIDATION_H
 
 #include "Types.h"
 #include "Errors.h"
@@ -30,12 +30,12 @@ namespace hxtp {
 /* ── Nonce Ring Buffer (fixed-size, no heap) ────────────────────────── */
 
 struct NonceEntry {
-    char     nonce[HXTP_MAX_NONCE_LEN + 1];
+    char     nonce[MaxNonceLen + 1];
     int64_t  timestamp_ms;         /* when inserted (epoch ms) */
 };
 
 struct NonceCache {
-    NonceEntry entries[HXTP_NONCE_CACHE_SIZE];
+    NonceEntry entries[NonceCacheSize];
     size_t     head;               /* next write position */
     size_t     count;              /* number of valid entries */
 
@@ -45,7 +45,7 @@ struct NonceCache {
      * Check if nonce is already in cache.
      * If not found, inserts it and returns false (not duplicate).
      * If found, returns true (DUPLICATE — reject).
-     * Also evicts entries older than HXTP_NONCE_TTL_SEC.
+     * Also evicts entries older than NonceTtlSec.
      */
     bool check_and_insert(const char* nonce, int64_t now_ms);
 };
@@ -70,11 +70,11 @@ struct SequenceTracker {
 
 struct ValidationContext {
     /* Device secret (binary, 32 bytes) — loaded from NVS */
-    uint8_t  device_secret[HXTP_SECRET_LEN];
+    uint8_t  device_secret[SecretLen];
     bool     secret_loaded;
 
     /* Previous device secret (for rotation window) */
-    uint8_t  prev_secret[HXTP_SECRET_LEN];
+    uint8_t  prev_secret[SecretLen];
     bool     prev_secret_loaded;
 
     /* Nonce cache */
@@ -89,8 +89,8 @@ struct ValidationContext {
     int64_t (*get_epoch_ms)(void);
 
     /* Expected device_id for this device */
-    char    device_id[HXTP_DEVICE_ID_LEN + 1];
-    char    tenant_id[HXTP_UUID_LEN + 1];
+    char    device_id[DeviceIdLen + 1];
+    char    tenant_id[UuidLen + 1];
 
     void init();
 };
@@ -102,23 +102,23 @@ struct ValidationContext {
  *
  * @param frame   Parsed inbound frame (from frame_decode + JSON parse)
  * @param ctx     Validation context with secrets, nonce cache, etc.
- * @return        HxtpValidationResult — .passed == true if all 7 steps pass
+ * @return        ValidationResult — .passed == true if all 7 steps pass
  */
-HxtpValidationResult validate_message(
-    const HxtpInboundFrame* frame,
+ValidationResult validate_message(
+    const InboundFrame* frame,
     ValidationContext* ctx
 );
 
 /* ── Individual Steps (exposed for testing) ─────────────────────────── */
 
-HxtpValidationResult validate_version(const HxtpInboundFrame* frame);
-HxtpValidationResult validate_timestamp(const HxtpInboundFrame* frame, int64_t now_ms);
-HxtpValidationResult validate_payload_size(const HxtpInboundFrame* frame);
-HxtpValidationResult validate_nonce(const HxtpInboundFrame* frame, NonceCache* cache, int64_t now_ms);
-HxtpValidationResult validate_payload_hash(const HxtpInboundFrame* frame);
-HxtpValidationResult validate_sequence(const HxtpInboundFrame* frame, SequenceTracker* tracker);
-HxtpValidationResult validate_signature(
-    const HxtpInboundFrame* frame,
+ValidationResult validate_version(const InboundFrame* frame);
+ValidationResult validate_timestamp(const InboundFrame* frame, int64_t now_ms);
+ValidationResult validate_payload_size(const InboundFrame* frame);
+ValidationResult validate_nonce(const InboundFrame* frame, NonceCache* cache, int64_t now_ms);
+ValidationResult validate_payload_hash(const InboundFrame* frame);
+ValidationResult validate_sequence(const InboundFrame* frame, SequenceTracker* tracker);
+ValidationResult validate_signature(
+    const InboundFrame* frame,
     const uint8_t* secret, size_t secret_len,
     const uint8_t* prev_secret, bool has_prev
 );
@@ -136,7 +136,7 @@ HxtpValidationResult validate_signature(
  * @return           true on success, false if buffer too small
  */
 bool build_canonical_string(
-    const HxtpMessageHeader* hdr,
+    const MessageHeader* hdr,
     char* out,
     size_t out_cap,
     size_t* out_len
@@ -144,4 +144,4 @@ bool build_canonical_string(
 
 } /* namespace hxtp */
 
-#endif /* HXTP_VALIDATION_H */
+#endif /* VALIDATION_H */
