@@ -41,6 +41,12 @@
     #include "PlatformESP8266.h"
 #endif
 
+#ifdef ESP32
+#include <HTTPClient.h>
+#elif defined(ESP8266)
+#include <ESP8266HTTPClient.h>
+#endif
+
 namespace hxtp {
 
 /* ── Connection State Machine ───────────────────────────────────────── */
@@ -50,13 +56,14 @@ enum class HxtpClientState : uint8_t {
     WIFI_CONNECTING = 1,    /* Connecting to WiFi */
     WIFI_CONNECTED  = 2,    /* WiFi up, not yet MQTT */
     TIME_SYNCING    = 3,    /* Waiting for NTP */
-    MQTT_LINKING    = 4,    /* Connecting to MQTT broker */
-    MQTT_LINKED     = 5,    /* MQTT up, subscribing */
-    SUBSCRIBING     = 6,    /* Subscribing to topics */
-    HELLO_SENT      = 7,    /* HELLO handshake sent */
-    READY           = 8,    /* Fully operational */
-    RECONNECTING    = 9,    /* Lost connection, retrying */
-    ERROR_STATE     = 10,   /* Fatal error */
+    BOOTSTRAPPING   = 4,    /* Fetching config via HTTP */
+    MQTT_LINKING    = 5,    /* Connecting to MQTT broker */
+    MQTT_LINKED     = 6,    /* MQTT up, subscribing */
+    SUBSCRIBING     = 7,    /* Subscribing to topics */
+    HELLO_SENT      = 8,    /* HELLO handshake sent */
+    READY           = 9,    /* Fully operational */
+    RECONNECTING    = 10,   /* Lost connection, retrying */
+    ERROR_STATE     = 11,   /* Fatal error */
 };
 
 /* ── Callback Types ─────────────────────────────────────────────────── */
@@ -143,6 +150,7 @@ private:
     /* ── State Machine Handlers ────────────────────────── */
     void tick_wifi_connecting();
     void tick_time_syncing();
+    void tick_bootstrapping();
     void tick_mqtt_connecting();
     void tick_subscribing();
     void tick_hello();
@@ -165,6 +173,10 @@ private:
     /* ── Config ──────────────────────────────────────── */
     HXTPConfig  config_;
 
+    /* ── Fetched Bootstrapped Config ─────────────────── */
+    char        mqtt_host_[64];
+    uint16_t    mqtt_port_;
+    
     /* ── Core Engine ─────────────────────────────────── */
     HxtpCore    core_;
 

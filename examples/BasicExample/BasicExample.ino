@@ -1,22 +1,3 @@
-/*
- * HXTP - Basic Example
- *
- * Demonstrates the minimal setup for an HXTP-connected ESP32 or ESP8266 device.
- * 
- * Board: ESP32 or ESP8266
- * 
- * Install Dependencies:
- *   - PubSubClient library
- * 
- * Configuration:
- *   1. Update WIFI_SSID and WIFI_PASS with your network credentials
- *   2. Set MQTT_HOST to your MQTT broker address
- *   3. Set TENANT_ID and DEVICE_SECRET from your HXTP configuration
- *   4. Update ROOT_CA with your server's root certificate
- *
- * Copyright (c) 2026 Hestia Labs
- * License: MIT
- */
 
 #include <HXTP.h>
 
@@ -82,16 +63,22 @@ void setup() {
   digitalWrite(LED_PIN, LOW);
   
   // Configure HXTP client
-  config.wifi_ssid        = WIFI_SSID;
-  config.wifi_password    = WIFI_PASS;
-  config.mqtt_host        = MQTT_HOST;
-  config.mqtt_port        = MQTT_PORT;
+  config.wifi_ssid     = "MyWiFiNetwork";
+  config.wifi_password = "SuperSecretPassword";
+
+  /* Provisioning Payload configuration */
+  config.api_base_url  = "https://api.hestialabs.com/api/v1";
+  config.device_id     = "d123456789abcdef0123456789abcdef";
+  config.tenant_id     = "t-987654321";
+  
+  // In production, the device secret should be loaded from secure storage.
+  // Setting it here for demonstration.
+  config.device_secret = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+  
   config.ca_cert          = ROOT_CA;
   config.verify_server    = true;
-  config.tenant_id        = TENANT_ID;
-  config.device_secret    = DEVICE_SECRET;
   config.firmware_version = "1.0.0";
-  config.device_type      = "basic-device";
+  config.device_type      = "smart_switch";
   
   // Create HXTP client instance
   client = new hxtp::HXTPClient(config);

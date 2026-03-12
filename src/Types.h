@@ -269,23 +269,16 @@ struct HXTPConfig {
     const char*  wifi_ssid;
     const char*  wifi_password;
 
-    /* MQTT Broker */
-    const char*  mqtt_host;
-    uint16_t     mqtt_port;
-    const char*  mqtt_username;
-    const char*  mqtt_password;
+    /* Provisioning Payload / Bootstrap */
+    const char*  api_base_url;   /* e.g. "https://cloud.hestialabs.in/api/v1" */
+    const char*  device_id;      /* 32-char hex */
+    const char*  tenant_id;      /* UUID */
+    const char*  device_secret;  /* 64-char hex */
+    uint32_t     initial_sequence;
 
     /* TLS */
     const char*  ca_cert;        /* PEM root CA (required in release builds) */
     bool         verify_server;
-
-    /* Identity */
-    const char*  device_id;      /* 32-char hex, or nullptr for auto */
-    const char*  tenant_id;      /* UUID */
-    const char*  client_id;      /* UUID (correlation) */
-
-    /* Device Secret (hex-encoded 64 chars, or nullptr for NVS lookup) */
-    const char*  device_secret;
 
     /* Device Metadata */
     const char*  firmware_version;
@@ -299,11 +292,9 @@ struct HXTPConfig {
     /* Defaults */
     HXTPConfig() :
         wifi_ssid(nullptr), wifi_password(nullptr),
-        mqtt_host(nullptr), mqtt_port(8883),
-        mqtt_username(nullptr), mqtt_password(nullptr),
+        api_base_url(nullptr), device_id(nullptr), tenant_id(nullptr),
+        device_secret(nullptr), initial_sequence(0),
         ca_cert(nullptr), verify_server(true),
-        device_id(nullptr), tenant_id(nullptr), client_id(nullptr),
-        device_secret(nullptr),
         firmware_version("0.0.1"), device_type("esp32"),
         heartbeat_interval_s(HXTP_HEARTBEAT_INTERVAL_S),
         frame_buf_size(HXTP_FRAME_BUF_DEFAULT),

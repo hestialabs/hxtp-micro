@@ -34,9 +34,11 @@ HXTPClient::HXTPClient(const HXTPConfig& config)
     , state_change_ctx_(nullptr)
     , error_cb_(nullptr)
     , error_ctx_(nullptr)
+    , mqtt_port_(8883)
 {
     memset(tx_buf_, 0, sizeof(tx_buf_));
     memset(ack_buf_, 0, sizeof(ack_buf_));
+    memset(mqtt_host_, 0, sizeof(mqtt_host_));
     s_instance_ = this;
 }
 
@@ -71,7 +73,7 @@ HxtpError HXTPClient::begin() {
     }
 
     /* ── Configure MQTT ──────────────────────────────── */
-    mqtt_client_.setServer(config_.mqtt_host, config_.mqtt_port);
+    // Server is set later after bootstrap resolves mqtt_host_
     mqtt_client_.setCallback(mqtt_callback_static);
     mqtt_client_.setBufferSize(config_.frame_buf_size > 0 ? config_.frame_buf_size : HXTP_FRAME_BUF_DEFAULT);
     mqtt_client_.setKeepAlive(HXTP_MQTT_KEEPALIVE_S);
@@ -143,6 +145,10 @@ void HXTPClient::loop() {
             tick_time_syncing();
             break;
 
+        case HxtpClientState::BOOTSTRAPPING:
+            tick_bootstrapping();
+            break;
+
         case HxtpClientState::MQTT_LINKING:
             tick_mqtt_connecting();
             break;
@@ -191,7 +197,7 @@ void HXTPClient::tick_time_syncing() {
 #ifdef ESP32
     /* Use ESP32 SNTP helper */
     if (platform::esp32_sync_time("pool.ntp.org", 100)) {
-        set_state(HxtpClientState::MQTT_LINKING);
+        set_state(HxtpClientState::BOOTSTRAPPING);
         return;
     }
 #else
@@ -201,7 +207,7 @@ void HXTPClient::tick_time_syncing() {
     struct tm ti;
     localtime_r(&tv.tv_sec, &ti);
     if (ti.tm_year > (2020 - 1900)) {
-        set_state(HxtpClientState::MQTT_LINKING);
+        set_state(HxtpClientState::BOOTSTRAPPING);
         return;
     }
 
@@ -216,8 +222,79 @@ void HXTPClient::tick_time_syncing() {
     /* Timeout after 15 seconds */
     if (millis() - state_enter_ms_ > 15000) {
         /* Proceed anyway — timestamp validation may reject, but we try */
-        set_state(HxtpClientState::MQTT_LINKING);
+        set_state(HxtpClientState::BOOTSTRAPPING);
     }
+}
+
+void HXTPClient::tick_bootstrapping() {
+    if (!config_.api_base_url || !config_.device_id) {
+        if (error_cb_) error_cb_(HxtpError::BOOTSTRAP_FAILED, "Missing api_base_url or device_id", error_ctx_);
+        set_state(HxtpClientState::ERROR_STATE);
+        return;
+    }
+
+    char url[256];
+    snprintf(url, sizeof(url), "%s/device/%s/bootstrap", config_.api_base_url, config_.device_id);
+
+    HTTPClient http;
+#ifdef ESP32
+    http.begin(tls_client_, url);
+#else
+    http.begin(tls_client_, url);
+#endif
+
+    int httpCode = http.GET();
+    if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED) {
+        String payload = http.getString();
+        
+        // Naive JSON parse avoiding dynamic memory objects
+        // Look for "mqtt_endpoint":"mqtts://host:port"
+        // E.g. "mqtt_endpoint":"mqtts://cloud.hestialabs.in:8883"
+        int endpoint_idx = payload.indexOf("\"mqtt_endpoint\":\"");
+        if (endpoint_idx > 0) {
+            int start_idx = endpoint_idx + 17;
+            int end_idx = payload.indexOf("\"", start_idx);
+            if (end_idx > start_idx) {
+                String endpoint = payload.substring(start_idx, end_idx);
+                
+                // Parse mqtts://host:port
+                int proto_end = endpoint.indexOf("://");
+                int host_start = (proto_end > 0) ? proto_end + 3 : 0;
+                int port_start = endpoint.lastIndexOf(":");
+                
+                if (port_start > host_start) {
+                    String host = endpoint.substring(host_start, port_start);
+                    int port = endpoint.substring(port_start + 1).toInt();
+                    
+                    snprintf(mqtt_host_, sizeof(mqtt_host_), "%s", host.c_str());
+                    mqtt_port_ = (uint16_t)port;
+                    
+                    mqtt_client_.setServer(mqtt_host_, mqtt_port_);
+                    set_state(HxtpClientState::MQTT_LINKING);
+                } else {
+                    snprintf(mqtt_host_, sizeof(mqtt_host_), "%s", endpoint.substring(host_start).c_str());
+                    mqtt_port_ = 8883; // default TLS port
+                    mqtt_client_.setServer(mqtt_host_, mqtt_port_);
+                    set_state(HxtpClientState::MQTT_LINKING);
+                }
+            } else {
+                if (error_cb_) error_cb_(HxtpError::BOOTSTRAP_FAILED, "Invalid endpoint value", error_ctx_);
+                set_state(HxtpClientState::RECONNECTING);
+            }
+        } else {
+            // Assume defaults if endpoint not provided in JSON but bootstrap returned 200
+            snprintf(mqtt_host_, sizeof(mqtt_host_), "cloud.hestialabs.in");
+            mqtt_client_.setServer(mqtt_host_, mqtt_port_);
+            set_state(HxtpClientState::MQTT_LINKING);
+        }
+    } else {
+        if (error_cb_) {
+            String err = "Bootstrap HTTP Error: " + String(httpCode);
+            error_cb_(HxtpError::BOOTSTRAP_FAILED, err.c_str(), error_ctx_);
+        }
+        set_state(HxtpClientState::RECONNECTING);
+    }
+    http.end();
 }
 
 void HXTPClient::tick_mqtt_connecting() {
@@ -231,8 +308,8 @@ void HXTPClient::tick_mqtt_connecting() {
     snprintf(mqtt_cid, sizeof(mqtt_cid), "hxtp-%s", core_.device_id());
 
     bool ok;
-    if (config_.mqtt_username && config_.mqtt_password) {
-        ok = mqtt_client_.connect(mqtt_cid, config_.mqtt_username, config_.mqtt_password);
+    if (config_.device_id && config_.device_secret) {
+        ok = mqtt_client_.connect(mqtt_cid, config_.device_id, config_.device_secret);
     } else {
         ok = mqtt_client_.connect(mqtt_cid);
     }

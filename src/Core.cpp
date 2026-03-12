@@ -327,16 +327,9 @@ HxtpError HxtpCore::init(
     }
 
     /* ── Client ID ─────────────────────────────────── */
-    if (config_->client_id) {
-        size_t clen = strlen(config_->client_id);
-        if (clen > HXTP_UUID_LEN) clen = HXTP_UUID_LEN;
-        memcpy(client_id_, config_->client_id, clen);
-        client_id_[clen] = '\0';
-    } else {
-        /* Generate a UUID v4 for this session */
-        HxtpError err = crypto::generate_uuid_v4(client_id_, platform_->random_bytes);
-        if (err != HxtpError::OK) return err;
-    }
+    /* Generate a UUID v4 for this session */
+    HxtpError err = crypto::generate_uuid_v4(client_id_, platform_->random_bytes);
+    if (err != HxtpError::OK) return err;
 
     /* ── Device Secret ─────────────────────────────── */
     if (config_->device_secret) {

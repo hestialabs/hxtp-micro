@@ -44,6 +44,8 @@ enum class HxtpError : uint16_t {
     BROKER_SUBSCRIBE_FAILED     = 3003,
     TLS_HANDSHAKE_FAILED        = 3004,
     WIFI_CONNECT_FAILED         = 3005,
+    TIME_SYNC_FAILED            = 3006,
+    BOOTSTRAP_FAILED            = 3007,
 
     /* Crypto errors */
     CRYPTO_INIT_FAILED          = 4001,
@@ -95,11 +97,13 @@ inline const char* hxtp_error_str(HxtpError e) {
         case HxtpError::PERMISSION_DENIED:          return "PERMISSION_DENIED";
         case HxtpError::INVALID_PARAMS:             return "INVALID_PARAMS";
         case HxtpError::CAPABILITY_NOT_REGISTERED:  return "CAPABILITY_NOT_REGISTERED";
-        case HxtpError::BROKER_CONNECT_FAILED:      return "MQTT_CONNECT_FAILED";
+        case HxtpError::BROKER_CONNECT_FAILED:      return "Broker connect failed";
         case HxtpError::BROKER_PUBLISH_FAILED:      return "MQTT_PUBLISH_FAILED";
         case HxtpError::BROKER_SUBSCRIBE_FAILED:    return "MQTT_SUBSCRIBE_FAILED";
         case HxtpError::TLS_HANDSHAKE_FAILED:       return "TLS_HANDSHAKE_FAILED";
-        case HxtpError::WIFI_CONNECT_FAILED:        return "WIFI_CONNECT_FAILED";
+        case HxtpError::WIFI_CONNECT_FAILED:        return "WiFi connect failed";
+        case HxtpError::TIME_SYNC_FAILED:           return "Time sync failed";
+        case HxtpError::BOOTSTRAP_FAILED:           return "Bootstrap failed";
         case HxtpError::CRYPTO_INIT_FAILED:         return "CRYPTO_INIT_FAILED";
         case HxtpError::HMAC_COMPUTE_FAILED:        return "HMAC_COMPUTE_FAILED";
         case HxtpError::SHA256_COMPUTE_FAILED:      return "SHA256_COMPUTE_FAILED";
