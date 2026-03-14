@@ -27,7 +27,8 @@ on:
     pull_request:
         branches: [main]
         paths:
-            - "lib/HXTP/**"
+            - "src/**"
+            - "library.properties"
             - ".github/workflows/arduino.yml"
 
 jobs:
@@ -42,7 +43,7 @@ jobs:
             - name: Arduino Lint
               uses: arduino/arduino-lint-action@v2
               with:
-                  path: lib/HXTP
+                  path: .
                   library-manager: update
                   compliance: strict
                   project-type: library
@@ -66,7 +67,7 @@ jobs:
               run: |
                   TAG="${{ github.ref }}"
                   VERSION="${TAG#refs/tags/v}"
-                  NAME=$(grep '^name=' lib/HXTP/library.properties | cut -d= -f2)
+                  NAME=$(grep '^name=' library.properties | cut -d= -f2)
                   echo "version=$VERSION" >> "$GITHUB_OUTPUT"
                   echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
                   echo "name=$NAME" >> "$GITHUB_OUTPUT"
@@ -74,9 +75,7 @@ jobs:
 
             - name: Create library archive
               run: |
-                  cd lib/HXTP
-                  zip -r ../../${{ steps.version.outputs.name }}-${{ steps.version.outputs.version }}.zip .
-                  cd ../..
+                  zip -r ${{ steps.version.outputs.name }}-${{ steps.version.outputs.version }}.zip . -x ".git/*" ".github/*" ".vscode/*"
                   ls -lh ${{ steps.version.outputs.name }}-${{ steps.version.outputs.version }}.zip
 
             - name: Create GitHub Release (triggered by tag push)
