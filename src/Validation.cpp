@@ -169,7 +169,7 @@ bool build_canonical_string(
 ValidationResult validate_version(const InboundFrame* frame) {
     if (!frame->header.version.equals(VersionString)) {
         return ValidationResult::fail(
-            ValidationStep::VERSION_CHECK,
+            ValidationStep::VersionCheck,
             "VERSION_MISMATCH: unsupported protocol version"
         );
     }
@@ -201,7 +201,7 @@ ValidationResult validate_timestamp(const InboundFrame* frame, int64_t now_ms) {
     /* Too old */
     if (age_sec > static_cast<int64_t>(MaxMessageAgeSec)) {
         return ValidationResult::fail(
-            ValidationStep::TIMESTAMP_CHECK,
+            ValidationStep::TimestampCheck,
             "TIMESTAMP_EXPIRED: message too old"
         );
     }
@@ -209,7 +209,7 @@ ValidationResult validate_timestamp(const InboundFrame* frame, int64_t now_ms) {
     /* Too far in the future (clock drift protection) */
     if (ts_sec > now_sec + static_cast<int64_t>(TimestampSkewSec)) {
         return ValidationResult::fail(
-            ValidationStep::TIMESTAMP_CHECK,
+            ValidationStep::TimestampCheck,
             "TIMESTAMP_FUTURE: message timestamp from future"
         );
     }
@@ -222,7 +222,7 @@ ValidationResult validate_timestamp(const InboundFrame* frame, int64_t now_ms) {
 ValidationResult validate_payload_size(const InboundFrame* frame) {
     if (frame->json_len > MaxPayloadBytes) {
         return ValidationResult::fail(
-            ValidationStep::PAYLOAD_SIZE_CHECK,
+            ValidationStep::PayloadSizeCheck,
             "PAYLOAD_TOO_LARGE: exceeds 16KB limit"
         );
     }
@@ -238,7 +238,7 @@ ValidationResult validate_nonce(
 {
     if (frame->header.nonce.empty()) {
         return ValidationResult::fail(
-            ValidationStep::NONCE_CHECK,
+            ValidationStep::NonceCheck,
             "NONCE_MISSING: nonce field is empty"
         );
     }
@@ -246,7 +246,7 @@ ValidationResult validate_nonce(
     bool is_dup = cache->check_and_insert(frame->header.nonce.c_str(), now_ms);
     if (is_dup) {
         return ValidationResult::fail(
-            ValidationStep::NONCE_CHECK,
+            ValidationStep::NonceCheck,
             "NONCE_REUSED: replay attack detected"
         );
     }
@@ -279,7 +279,7 @@ ValidationResult validate_payload_hash(const InboundFrame* frame) {
     Error err = crypto::sha256_hex(params, plen, computed_hex);
     if (err != Error::OK) {
         return ValidationResult::fail(
-            ValidationStep::PAYLOAD_HASH_CHECK,
+            ValidationStep::PayloadHashCheck,
             "HASH_COMPUTE_FAILED: could not compute SHA-256"
         );
     }
@@ -287,7 +287,7 @@ ValidationResult validate_payload_hash(const InboundFrame* frame) {
     /* Compare hashes — NOT constant-time (payload hash is not a secret) */
     if (strcmp(computed_hex, frame->header.payload_hash.c_str()) != 0) {
         return ValidationResult::fail(
-            ValidationStep::PAYLOAD_HASH_CHECK,
+            ValidationStep::PayloadHashCheck,
             "HASH_MISMATCH: payload hash does not match"
         );
     }
@@ -309,7 +309,7 @@ ValidationResult validate_sequence(
     bool valid = tracker->check_and_advance(frame->header.sequence_number);
     if (!valid) {
         return ValidationResult::fail(
-            ValidationStep::SEQUENCE_CHECK,
+            ValidationStep::SequenceCheck,
             "SEQUENCE_VIOLATION: out-of-order or duplicate sequence"
         );
     }
@@ -326,7 +326,7 @@ ValidationResult validate_signature(
 {
     if (frame->header.signature.empty()) {
         return ValidationResult::fail(
-            ValidationStep::SIGNATURE_CHECK,
+            ValidationStep::SignatureCheck,
             "SIGNATURE_MISSING: signature field is empty"
         );
     }
@@ -336,7 +336,7 @@ ValidationResult validate_signature(
     size_t canonical_len = 0;
     if (!build_canonical_string(&frame->header, canonical, sizeof(canonical), &canonical_len)) {
         return ValidationResult::fail(
-            ValidationStep::SIGNATURE_CHECK,
+            ValidationStep::SignatureCheck,
             "CANONICAL_BUILD_FAILED: could not build canonical string"
         );
     }
@@ -350,7 +350,7 @@ ValidationResult validate_signature(
     );
     if (err != Error::OK) {
         return ValidationResult::fail(
-            ValidationStep::SIGNATURE_CHECK,
+            ValidationStep::SignatureCheck,
             "HMAC_COMPUTE_FAILED: could not compute HMAC"
         );
     }
@@ -373,7 +373,7 @@ ValidationResult validate_signature(
         );
         if (err != Error::OK) {
             return ValidationResult::fail(
-                ValidationStep::SIGNATURE_CHECK,
+                ValidationStep::SignatureCheck,
                 "HMAC_COMPUTE_FAILED: previous secret HMAC failed"
             );
         }
@@ -390,7 +390,7 @@ ValidationResult validate_signature(
 
     /* Both secrets failed */
     return ValidationResult::fail(
-        ValidationStep::SIGNATURE_CHECK,
+        ValidationStep::SignatureCheck,
         "SIGNATURE_INVALID: HMAC verification failed"
     );
 }
@@ -405,7 +405,7 @@ ValidationResult validate_message(
 {
     if (!frame || !ctx) {
         return ValidationResult::fail(
-            ValidationStep::VERSION_CHECK,
+            ValidationStep::VersionCheck,
             "NULL_INPUT: frame or context is null"
         );
     }
@@ -445,7 +445,7 @@ ValidationResult validate_message(
     /* ── Step 7: HMAC Signature ───────────────────────── */
     if (!ctx->secret_loaded) {
         return ValidationResult::fail(
-            ValidationStep::SIGNATURE_CHECK,
+            ValidationStep::SignatureCheck,
             "SECRET_NOT_LOADED: device secret unavailable"
         );
     }

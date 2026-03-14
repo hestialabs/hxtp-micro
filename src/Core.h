@@ -63,6 +63,15 @@ bool json_get_int64(
 );
 
 /**
+ * Extract a boolean field value from raw JSON.
+ */
+bool json_get_bool(
+    const char* json, size_t json_len,
+    const char* key,
+    bool* out
+);
+
+/**
  * Extract a uint16 field value from raw JSON.
  */
 bool json_get_uint16(
@@ -197,6 +206,7 @@ public:
     ValidationContext&   validation_ctx() { return val_ctx_; }
     int64_t             next_sequence();
     bool                is_initialized() const { return initialized_; }
+    bool                is_secret_loaded() const { return secret_loaded_; }
     const char*         device_id() const { return device_id_; }
     const char*         tenant_id() const { return tenant_id_; }
     const uint8_t*      device_secret() const { return device_secret_; }

@@ -20,8 +20,10 @@
 
 #ifdef ESP32
     #include <HTTPClient.h>
+    #include <WiFiClientSecure.h>
 #elif defined(ESP8266)
     #include <ESP8266HTTPClient.h>
+    #include <WiFiClientSecure.h>
 #endif
 
 namespace hxtp {

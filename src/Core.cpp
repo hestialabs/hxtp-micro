@@ -240,6 +240,29 @@ bool json_get_int64(
     return (endp != num_buf && endp != nullptr);
 }
 
+bool json_get_bool(
+    const char* json, size_t json_len,
+    const char* key,
+    bool* out)
+{
+    if (!json || !key || !out) return false;
+
+    const char* val_end = nullptr;
+    const char* val = find_key(json, json_len, key, &val_end);
+    if (!val) return false;
+
+    size_t nlen = static_cast<size_t>(val_end - val);
+    if (nlen >= 4 && memcmp(val, "true", 4) == 0) {
+        *out = true;
+        return true;
+    }
+    if (nlen >= 5 && memcmp(val, "false", 5) == 0) {
+        *out = false;
+        return true;
+    }
+    return false;
+}
+
 bool json_get_uint16(
     const char* json, size_t json_len,
     const char* key,
@@ -452,16 +475,6 @@ Error Core::parse_json_header(InboundFrame* frame) {
         frame->header.request_id.set(buf, blen);
     }
 
-    /* sequence_number */
-    int64_t seq = -1;
-    if (json_get_int64(json, jlen, "sequence_number", &seq)) {
-        frame->header.sequence_number = seq;
-    } else if (json_get_int64(json, jlen, "sequence", &seq)) {
-        frame->header.sequence_number = seq;
-    } else {
-        frame->header.sequence_number = -1;
-    }
-
     /* payload_hash */
     if (json_get_string(json, jlen, "payload_hash", buf, sizeof(buf), &blen)) {
         frame->header.payload_hash.set(buf, blen);
@@ -546,14 +559,14 @@ Error Core::process_inbound(
 
         /* Map validation step to error code */
         switch (vr.failed_step) {
-            case ValidationStep::VERSION_CHECK:      return Error::VERSION_MISMATCH;
-            case ValidationStep::TIMESTAMP_CHECK:    return Error::TIMESTAMP_EXPIRED;
-            case ValidationStep::PAYLOAD_SIZE_CHECK:  return Error::PAYLOAD_TOO_LARGE;
-            case ValidationStep::NONCE_CHECK:        return Error::NONCE_REUSED;
-            case ValidationStep::PAYLOAD_HASH_CHECK: return Error::HASH_MISMATCH;
-            case ValidationStep::SEQUENCE_CHECK:     return Error::SEQUENCE_VIOLATION;
-            case ValidationStep::SIGNATURE_CHECK:    return Error::SIGNATURE_INVALID;
-            default:                                      return Error::INTERNAL_ERROR;
+            case ValidationStep::VersionCheck:      return Error::VERSION_MISMATCH;
+            case ValidationStep::TimestampCheck:    return Error::TIMESTAMP_EXPIRED;
+            case ValidationStep::PayloadSizeCheck:  return Error::PAYLOAD_TOO_LARGE;
+            case ValidationStep::NonceCheck:        return Error::NONCE_REUSED;
+            case ValidationStep::PayloadHashCheck: return Error::HASH_MISMATCH;
+            case ValidationStep::SequenceCheck:     return Error::SEQUENCE_VIOLATION;
+            case ValidationStep::SignatureCheck:    return Error::SIGNATURE_INVALID;
+            default:                                 return Error::INTERNAL_ERROR;
         }
     }
 
