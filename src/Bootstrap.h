@@ -15,7 +15,6 @@
 #define BOOTSTRAP_H
 
 #include "Types.h"
-#include "HxtpClient.h"
 #include "Core.h"
 #include <Arduino.h>
 

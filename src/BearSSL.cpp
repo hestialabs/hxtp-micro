@@ -96,7 +96,7 @@ Error sha256(const uint8_t* data, size_t len, uint8_t out[Sha256Len]) {
      * experimental::crypto::SHA256::hash(data, dataLength, resultArray)
      * Returns pointer to resultArray on success.
      */
-    void* const result = experimental::crypto::SHA256::hash(data, len, out);
+    const void* result = experimental::crypto::SHA256::hash(data, len, out);
     return result ? Error::OK : Error::SHA256_COMPUTE_FAILED;
 }
 
@@ -120,7 +120,7 @@ Error hmac_sha256(
      *                                    resultArray, outputLength)
      * outputLength=0 means use NATURAL_LENGTH (32).
      */
-    void* const result = experimental::crypto::SHA256::hmac(
+    const void* result = experimental::crypto::SHA256::hmac(
         data, data_len,
         key, key_len,
         out, 0  /* 0 = full NATURAL_LENGTH = 32 bytes */

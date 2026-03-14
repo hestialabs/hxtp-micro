@@ -21,6 +21,10 @@ Client* Client::s_instance_ = nullptr;
 
 Client::Client(const Config& config)
     : config_(config)
+    , mqtt_port_(8883)
+    , core_()
+    , storage_adapter_({})
+    , platform_crypto_({})
     , provisioning_(&storage_adapter_)
     , bootstrap_(&core_, &tls_client_)
     , mqtt_client_(tls_client_)
@@ -34,11 +38,8 @@ Client::Client(const Config& config)
     , state_enter_ms_(0)
     , state_change_cb_(nullptr)
     , state_change_ctx_(nullptr)
-    ,error_cb_(nullptr)
-    ,error_ctx_(nullptr)
-    ,storage_adapter_({})
-    ,platform_crypto_({})
-    ,mqtt_port_(8883)
+    , error_cb_(nullptr)
+    , error_ctx_(nullptr)
 {
     memset(tx_buf_, 0, sizeof(tx_buf_));
     memset(ack_buf_, 0, sizeof(ack_buf_));
@@ -439,6 +440,7 @@ bool Client::subscribe_topics() {
 
 /* ── MQTT Message Handling ──────────────────────────────────────────── */
 
+// cppcheck-suppress constParameterCallback
 void Client::mqtt_callback_static(char* topic, uint8_t* payload, unsigned int length) {
     if (s_instance_) {
         s_instance_->mqtt_on_message(topic, payload, length);

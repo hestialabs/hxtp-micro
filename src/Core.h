@@ -146,7 +146,7 @@ public:
      * @return           Error::OK or error
      */
     Error build_outbound(
-        OutboundContext* ctx,
+        const OutboundContext* ctx,
         uint8_t* out, size_t out_cap, size_t* out_len
     );
 

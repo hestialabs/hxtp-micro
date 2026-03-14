@@ -575,6 +575,7 @@ Error Core::process_inbound(
     if (frame.wire_type == MessageType::COMMAND) {
         /* Parse command-specific fields */
         err = parse_command_payload(&frame);
+        // cppcheck-suppress knownConditionTrueFalse
         if (err != Error::OK) return err;
 
         if (frame.command.action.empty()) {
@@ -758,7 +759,7 @@ Error Core::build_signed_json(
 }
 
 Error Core::build_outbound(
-    OutboundContext* ctx,
+    const OutboundContext* ctx,
     uint8_t* out, size_t out_cap, size_t* out_len)
 {
     if (!ctx || !out || !out_len) return Error::INVALID_PARAMS;

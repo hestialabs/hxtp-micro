@@ -112,6 +112,7 @@ Error sha256(const uint8_t* data, size_t len, uint8_t out[Sha256Len]) {
 Error sha256_hex(const char* str, size_t str_len, char out_hex[Sha256HexLen + 1]) {
     uint8_t hash[Sha256Len];
     Error err = sha256(reinterpret_cast<const uint8_t*>(str), str_len, hash);
+    // cppcheck-suppress knownConditionTrueFalse
     if (err != Error::OK) return err;
     hex_encode(hash, Sha256Len, out_hex);
     return Error::OK;

@@ -15,8 +15,8 @@
  * SDK-License-Identifier: MIT
  */
 
-#ifndef CLIENT_H
-#define CLIENT_H
+#ifndef HXTP_CLIENT_H
+#define HXTP_CLIENT_H
 
 #include "Config.h"
 #include "Types.h"
@@ -237,4 +237,4 @@ private:
 
 } /* namespace hxtp */
 
-#endif /* CLIENT_H */
+#endif /* HXTP_CLIENT_H */

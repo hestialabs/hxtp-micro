@@ -80,9 +80,9 @@ jobs:
                   echo "Detected: $NAME v$VERSION from tag"
 
                   cd hxtp-micro
-                  zip -r ../${{ steps.version.outputs.name }}-${{ steps.version.outputs.version }}.zip . -x ".git/*" ".github/*" ".vscode/*"
+                  zip -r "../$NAME-$VERSION.zip" . -x ".git/*" ".github/*" ".vscode/*"
                   cd ..
-                  ls -lh ${{ steps.version.outputs.name }}-${{ steps.version.outputs.version }}.zip
+                  ls -lh "$NAME-$VERSION.zip"
 
             - name: Create GitHub Release (triggered by tag push)
               uses: softprops/action-gh-release@v2
