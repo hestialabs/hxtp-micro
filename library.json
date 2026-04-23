@@ -15,16 +15,16 @@
         "tls"
     ],
     "license": "MIT",
-    "homepage": "https://github.com/hestia1abs/hxtp-micro",
+    "homepage": "https://github.com/hestialabs/hxtp-micro",
     "authors": [
         {
             "name": "Hestia Labs",
-            "url": "https://github.com/hestia1abs"
+            "url": "https://github.com/hestialabs"
         }
     ],
     "repository": {
         "type": "git",
-        "url": "https://github.com/hestia1abs/hxtp-micro.git"
+        "url": "https://github.com/hestialabs/hxtp-micro.git"
     },
     "frameworks": "arduino",
     "platforms": [
