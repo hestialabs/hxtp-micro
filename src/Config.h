@@ -1,9 +1,9 @@
 /*
- * HXTP Embedded SDK v1.0.0
+ * HXTP Embedded SDK v1.0.3
  * Compile-Time Feature Configuration
  *
  * ════════════════════════════════════════════════════════════════
- *  STABILITY CONTRACT — v1.0.0-embedded-stable
+ *  STABILITY CONTRACT — v1.0.3-embedded-stable
  * ════════════════════════════════════════════════════════════════
  *
  *  The following are FROZEN and MUST NOT change:
@@ -46,8 +46,8 @@
 
 #define HXTP_SDK_VERSION_MAJOR  1
 #define HXTP_SDK_VERSION_MINOR  0
-#define HXTP_SDK_VERSION_PATCH  0
-#define HXTP_SDK_VERSION_TAG    "v1.0.0-embedded-stable"
+#define HXTP_SDK_VERSION_PATCH  3
+#define HXTP_SDK_VERSION_TAG    "v1.0.3-embedded-stable"
 
 /* ── Build Profile Flags ────────────────────────────────────────────── */
 /*
@@ -181,7 +181,7 @@
 #define HXTP_SECURITY_NO_PLAINTEXT_MODE         1
 #define HXTP_SECURITY_NO_SIGNATURE_DOWNGRADE    1
 
-/* ── Memory Footprint Baseline (v1.0.0-embedded-stable) ─────────────── */
+/* ── Memory Footprint Baseline (v1.0.3-embedded-stable) ─────────────── */
 /*
  * ESP32-S3 (8 MB flash):  RAM 13.8% (45 KB / 320 KB)  Flash 29.6% (991 KB / 3.2 MB)
  * ESP32    (4 MB flash):  RAM 13.9% (45 KB / 320 KB)  Flash 51.7% (1016 KB / 1.9 MB*)

@@ -42,7 +42,7 @@ void setup() {
 
     // 1. Configure the HXTP Client with Defaults
     // No hardcoded passwords or IDs needed!
-    Config config;
+    hxtp::Config config;
     config.device_type      = "basic-device";
     config.firmware_version = "1.1.0";
     

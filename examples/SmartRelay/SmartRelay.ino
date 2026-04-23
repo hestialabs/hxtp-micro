@@ -55,7 +55,7 @@ void setup() {
     digitalWrite(RELAY_PIN, LOW);
 
     // 1. Configure the HXTP Client
-    Config config;
+    hxtp::Config config;
     config.device_type      = "smart-relay";
     config.firmware_version = "1.2.0";
     config.verify_server    = true; // Enforce Root CA validation
