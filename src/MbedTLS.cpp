@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * Cryptographic Operations — mbedTLS Implementation (ESP32)
  *
  * Uses mbedTLS for all crypto (available on ESP32, ESP32-S2, ESP32-S3, ESP32-C3).

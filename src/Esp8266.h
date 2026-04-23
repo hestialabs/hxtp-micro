@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * ESP8266 Platform — Storage (EEPROM) + Crypto Adapter
  *
  * ESP8266 does not have NVS; uses EEPROM emulation (flash sector).

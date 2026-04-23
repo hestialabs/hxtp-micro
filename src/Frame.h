@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * Binary Frame Encoder/Decoder — Header
  *
  * Handles the HXTP binary wire format:

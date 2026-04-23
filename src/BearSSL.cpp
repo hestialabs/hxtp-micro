@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * Cryptographic Operations — BearSSL Implementation (ESP8266)
  *
  * Implements the hxtp::crypto interface using ESP8266 Arduino Crypto.h

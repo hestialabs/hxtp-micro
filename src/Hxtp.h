@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0.0
+ * HXTP Embedded SDK v1.0.3.3
  * Public API — Single-Entry Header
  *
  * Usage:

@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * ESP32 Platform — Transport & Crypto Layer
  *
  * Provides:

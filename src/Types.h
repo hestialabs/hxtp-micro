@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * Core Type Definitions
  *
  * Platform-agnostic types for the HXTP protocol.

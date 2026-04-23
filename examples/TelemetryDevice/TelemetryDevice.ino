@@ -30,7 +30,7 @@ void setup() {
     Serial.println("\n--- HxTP Telemetry Device Starting ---");
 
     // 1. Configure the HXTP Client
-    Config config;
+    hxtp::Config config;
     config.device_type      = "telemetry-node";
     config.firmware_version = "1.0.5";
     config.verify_server    = true; 

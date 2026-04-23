@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * Core Orchestrator — Implementation
  *
  * Minimal zero-allocation JSON parser + full message pipeline.

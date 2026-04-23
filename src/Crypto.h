@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * Cryptographic Operations — Header
  *
  * Provides SHA-256, HMAC-SHA256, AES-256-GCM, constant-time compare,

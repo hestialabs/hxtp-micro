@@ -63,7 +63,7 @@ void setup() {
     Serial.println("\n--- HxTP Multi-Capability Hub Starting ---");
 
     // 1. Configure the HXTP Client
-    Config config;
+    hxtp::Config config;
     config.device_type      = "advanced-hub";
     config.firmware_version = "2.0.0";
     config.verify_server    = true; 
