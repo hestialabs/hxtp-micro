@@ -53,8 +53,8 @@
     "examples": [
         "examples/BasicDevice/BasicDevice.ino",
         "examples/BuildTest/BuildTest.ino",
-        "examples/MultiCap/MultiCapabilityDevive.ino",
+        "examples/MultiCapabilityDevice/MultiCapabilityDevice.ino",
         "examples/SmartRelay/SmartRelay.ino",
-        "examples/TeleMentryDevice/TeleMentryDevice.ino"
+        "examples/TelemetryDevice/TelemetryDevice.ino"
     ]
 }
