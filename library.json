@@ -18,7 +18,7 @@
     "homepage": "https://github.com/hestialabs/hxtp-micro",
     "authors": [
         {
-            "name": "Hestia Labs",
+            "name": "Hestia Labs LLP",
             "url": "https://github.com/hestialabs"
         }
     ],
@@ -51,10 +51,10 @@
         ]
     },
     "examples": [
-        "examples/SingleNode/main.cpp",
-        "examples/MultiRelay/main.cpp",
-        "examples/ESP8266Node/main.cpp",
-        "examples/WemosD1Mini/main.cpp",
-        "examples/GenericWiFi/main.cpp"
+        "examples/BasicDevice/BasicDevice.ino",
+        "examples/BuildTest/BuildTest.ino",
+        "examples/MultiCap/MultiCapabilityDevive.ino",
+        "examples/SmartRelay/SmartRelay.ino",
+        "examples/TeleMentryDevice/TeleMentryDevice.ino"
     ]
 }
