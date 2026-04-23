@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * Arduino Client Wrapper — Header
  *
  * High-level API for Arduino sketches:

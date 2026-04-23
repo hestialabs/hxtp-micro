@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * Core Orchestrator — Header
  *
  * Ties together frame decode, JSON parse, validation pipeline,

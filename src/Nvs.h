@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * ESP32 Platform — NVS Storage Adapter
  *
  * Implements StorageAdapter using ESP32 Non-Volatile Storage (NVS).

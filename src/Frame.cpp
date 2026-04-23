@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * Binary Frame Encoder/Decoder — Implementation
  *
  * Copyright (c) 2026 Hestia Labs

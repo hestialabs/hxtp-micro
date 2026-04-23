@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * Bootstrap Client — Implementation
  *
  * Copyright (c) 2026 Hestia Labs
@@ -54,15 +54,28 @@ BootstrapConfig Bootstrap::perform(const char* api_url) {
     crypto::hmac_sha256_hex(core_->device_secret(), SecretLen,
                             canonical, strlen(canonical), signature);
 
-    /* ── Execute HTTP Request ────────────────────────────── */
+    /* Execute HTTP Request */
     HTTPClient http;
+#ifdef ESP8266
+    BearSSL::X509List* tmp_x509 = nullptr;
+#endif
 
     /* Load Root CA if available */
     char ca_cert[4096];
-    if (core_->storage()->read_ca_cert(ca_cert, sizeof(ca_cert))) {
+    if (core_->storage() && core_->storage()->read_ca_cert && core_->storage()->read_ca_cert(ca_cert, sizeof(ca_cert))) {
+#ifdef ESP32
         tls_client_->setCACert(ca_cert);
+#elif defined(ESP8266)
+        tmp_x509 = new BearSSL::X509List(ca_cert);
+        tls_client_->setTrustAnchors(tmp_x509);
+#endif
     } else if (core_->config()->ca_cert) {
+#ifdef ESP32
         tls_client_->setCACert(core_->config()->ca_cert);
+#elif defined(ESP8266)
+        tmp_x509 = new BearSSL::X509List(core_->config()->ca_cert);
+        tls_client_->setTrustAnchors(tmp_x509);
+#endif
     } else if (core_->config()->verify_server) {
         /* If verify requested but no cert found, fail closed */
         Serial.println("[HXTP] ERROR: TLS verification requested but no CA cert found.");
@@ -114,6 +127,11 @@ BootstrapConfig Bootstrap::perform(const char* api_url) {
     }
 
     http.end();
+#ifdef ESP8266
+    /* Cleanup temporary trust anchor */
+    tls_client_->setTrustAnchors(nullptr);
+    if (tmp_x509) delete tmp_x509;
+#endif
     return config;
 }
 

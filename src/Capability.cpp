@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * Capability Registry — Implementation
  *
  * Fixed-array capability storage. No heap allocation.

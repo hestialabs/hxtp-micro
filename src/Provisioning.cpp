@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * Provisioning Manager — Implementation
  *
  * Copyright (c) 2026 Hestia Labs
@@ -92,16 +92,23 @@ void Provisioning::handleClaim() {
 
     /* ── Persist to Storage ────────────────────────────── */
     if (storage_) {
-        storage_->write_param("wifi_ssid", ssid);
-        storage_->write_param("wifi_pass", pass);
-        storage_->write_param("tenant_id", tenant);
-        storage_->write_device_id(device);
+        if (storage_->write_param) {
+            storage_->write_param("wifi_ssid", ssid);
+            storage_->write_param("wifi_pass", pass);
+            storage_->write_param("tenant_id", tenant);
+        }
+        
+        if (storage_->write_device_id) {
+            storage_->write_device_id(device);
+        }
 
         /* Decode and store binary secret */
         uint8_t secret_bin[SecretLen];
         size_t dlen = 0;
         if (crypto::hex_decode(secret_hex, strlen(secret_hex), secret_bin, &dlen) && dlen == SecretLen) {
-            storage_->write_secret(secret_bin, SecretLen);
+            if (storage_->write_secret) {
+                storage_->write_secret(secret_bin, SecretLen);
+            }
         } else {
             /* Error decoding secret */
             server_.send(400, "application/json", "{\"error\":\"SECRET_HEX_INVALID\"}");

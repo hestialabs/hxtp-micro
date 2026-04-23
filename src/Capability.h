@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * Capability Registry — Header
  *
  * Fixed-array capability registry. No dynamic allocation.

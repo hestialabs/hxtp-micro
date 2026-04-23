@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * Error Code Definitions
  *
  * Maps to server-side ProtocolError enum values.

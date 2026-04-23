@@ -1,5 +1,5 @@
 /*
- * HXTP Embedded SDK v1.0
+ * HXTP Embedded SDK v1.0.3
  * Arduino Client Wrapper — Implementation
  *
  * Full connection lifecycle: WiFi → NTP → TLS/MQTT → HELLO → Ready
@@ -140,10 +140,22 @@ void Client::connect() {
     
     /* Load Root CA for strict verification */
     char ca_cert[4096];
-    if (storage_adapter_.read_ca_cert(ca_cert, sizeof(ca_cert))) {
+    if (storage_adapter_.read_ca_cert && storage_adapter_.read_ca_cert(ca_cert, sizeof(ca_cert))) {
+#ifdef ESP32
         tls_client_.setCACert(ca_cert);
+#elif defined(ESP8266)
+        if (x509_ca_) delete x509_ca_;
+        x509_ca_ = new BearSSL::X509List(ca_cert);
+        tls_client_.setTrustAnchors(x509_ca_);
+#endif
     } else if (config_.ca_cert) {
+#ifdef ESP32
         tls_client_.setCACert(config_.ca_cert);
+#elif defined(ESP8266)
+        if (x509_ca_) delete x509_ca_;
+        x509_ca_ = new BearSSL::X509List(config_.ca_cert);
+        tls_client_.setTrustAnchors(x509_ca_);
+#endif
     } else if (config_.verify_server) {
         /* Fail closed if verification requested but no cert found */
         Serial.println("[HXTP] ERROR: TLS verification requested but no CA cert found.");
@@ -159,7 +171,9 @@ void Client::connect() {
         WiFi.mode(WIFI_STA);
         if (saved_ssid[0] != '\0') {
             char saved_pass[64] = {0};
-            storage_adapter_.read_param("wifi_pass", saved_pass, sizeof(saved_pass));
+            if (storage_adapter_.read_param) {
+                storage_adapter_.read_param("wifi_pass", saved_pass, sizeof(saved_pass));
+            }
             WiFi.begin(saved_ssid, saved_pass);
         } else {
             WiFi.begin(config_.wifi_ssid, config_.wifi_password);
