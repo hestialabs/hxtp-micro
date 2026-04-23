@@ -55,27 +55,28 @@ Initialize the client and register your capabilities in `main.cpp`:
 ```cpp
 #include <Hxtp.h>
 
-hxtp::Client client;
+hxtp::Client* client = nullptr;
 
 void setup() {
-    Config config;
+    hxtp::Config config;
     config.device_type = "smart-sensor";
     config.firmware_version = "1.1.0";
     config.verify_server = true; 
 
-    client.begin(config);
+    client = new hxtp::Client(config);
+    client->begin();
     
     // Register a capability (Action ID, Name, Handler)
-    client.registerCapability(1, "toggle_led", [](const char* params, uint32_t len, void* ctx) {
+    client->registerCapability(1, "toggle_led", [](const char* params, uint32_t len, void* ctx) {
         // Handle LED toggle logic here
         return CapabilityResult{true, 0, ""};
     });
     
-    client.connect(); // Auto-provisioning if credentials missing
+    client->connect(); // Auto-provisioning if credentials missing
 }
 
 void loop() {
-    client.loop(); // Internal state machine (Provisioning -> MQTT)
+    if (client) client->loop(); // Internal state machine (Provisioning -> MQTT)
 }
 ```
 
