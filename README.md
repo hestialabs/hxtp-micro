@@ -53,7 +53,7 @@ build_flags =
 Initialize the client and register your capabilities in `main.cpp`:
 
 ```cpp
-#include <HXTP.h>
+#include <Hxtp.h>
 
 hxtp::Client client;
 
@@ -134,14 +134,14 @@ The SDK implements the **Modern Cloud Security Specification (MCSS) v3.0**. All 
 
 ```text
 src/
-├── HXTP.h               # Umbrella header
+├── Hxtp.h               # Umbrella header
 ├── Config.h             # Tunables & Flags
 ├── Types.h              # Protocol constants
-├── HXTPCrypto.h         # Crypto abstraction
+├── Crypto.h             # Crypto abstraction
 ├── Frame.h / .cpp       # Packet serialization
 ├── Validation.h / .cpp  # Security pipeline
 ├── Capability.h / .cpp  # Handler registry
-└── HXTPClient.h / .cpp  # High-level API
+└── HxtpClient.h / .cpp  # High-level API
 ```
 
 ---
