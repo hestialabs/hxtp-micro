@@ -109,7 +109,7 @@ void ValidationContext::init() {
  * Builds a strict Canonical JSON string (Production Grade).
  * - Lexicographical order
  * - Numbers as strings ("123.45")
- * - Injects "protocol":"hxtp/1.0"
+ * - Injects "protocol":"hxtp/3.0"
  * - Rejects non-ASCII to avoid NFC ambiguity
  */
 bool build_canonical_json(
@@ -160,7 +160,7 @@ bool build_canonical_json(
         "\"nonce\":\"%s\","
         "\"params\":%.*s,"
         "\"payload_hash\":\"%s\","
-        "\"protocol\":\"hxtp/1.0\","
+        "\"protocol\":\"hxtp/3.0\","
         "\"request_id\":\"%s\","
         "\"sequence_number\":\"%lld\","
         "\"tenant_id\":\"%s\","

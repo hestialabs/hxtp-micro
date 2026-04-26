@@ -717,7 +717,7 @@ Error Core::build_signed_json(
         "\"nonce\":\"%s\","
         "\"params\":%.*s,"
         "\"payload_hash\":\"%s\","
-        "\"protocol\":\"hxtp/1.0\","
+        "\"protocol\":\"hxtp/3.0\","
         "\"request_id\":\"%s\","
         "\"sequence_number\":\"%lld\","
         "\"signature\":\"%s\","
