@@ -96,7 +96,7 @@ enum class MessageType : uint8_t {
     HEARTBEAT  = 0x04,
     TELEMETRY  = 0x05,
     OTA        = 0x06,
-    ERROR_MSG  = 0x07,
+    ERROR      = 0x07,
     HELLO      = 0x08,
 };
 
@@ -109,7 +109,7 @@ struct MessageTypeStr {
     static constexpr char HEARTBEAT[] = "heartbeat";
     static constexpr char TELEMETRY[] = "telemetry";
     static constexpr char OTA[]       = "ota";
-    static constexpr char ERROR_MSG[] = "error";
+    static constexpr char ERROR[]     = "error";
     static constexpr char HELLO[]     = "hello";
 };
 

@@ -40,7 +40,7 @@ const char* frame_type_to_str(MessageType type) {
         case MessageType::HEARTBEAT:  return MessageTypeStr::HEARTBEAT;
         case MessageType::TELEMETRY:  return MessageTypeStr::TELEMETRY;
         case MessageType::OTA:        return MessageTypeStr::OTA;
-        case MessageType::ERROR_MSG:  return MessageTypeStr::ERROR_MSG;
+        case MessageType::ERROR:      return MessageTypeStr::ERROR;
         case MessageType::HELLO:      return MessageTypeStr::HELLO;
         default:                              return nullptr;
     }
@@ -54,7 +54,7 @@ MessageType frame_str_to_type(const char* s) {
     if (strcmp(s, MessageTypeStr::HEARTBEAT) == 0) return MessageType::HEARTBEAT;
     if (strcmp(s, MessageTypeStr::TELEMETRY) == 0) return MessageType::TELEMETRY;
     if (strcmp(s, MessageTypeStr::OTA)       == 0) return MessageType::OTA;
-    if (strcmp(s, MessageTypeStr::ERROR_MSG) == 0) return MessageType::ERROR_MSG;
+    if (strcmp(s, MessageTypeStr::ERROR)     == 0) return MessageType::ERROR;
     if (strcmp(s, MessageTypeStr::HELLO)     == 0) return MessageType::HELLO;
     return static_cast<MessageType>(0);
 }

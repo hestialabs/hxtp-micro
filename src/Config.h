@@ -20,7 +20,7 @@
  *       aes256_gcm_decrypt(), aes256_gcm_encrypt()
  *
  *    4. Binary frame format:
- *       [0-1] MAGIC "HX" | [2] VERSION=2 | [3] TYPE | [4-7] JSON_LEN BE | [8..] JSON
+ *       [0-1] MAGIC "HX" | [2] VERSION=3 | [3] TYPE | [4-7] JSON_LEN BE | [8..] JSON
  *
  *    5. Error code values (match server enum)
  *
