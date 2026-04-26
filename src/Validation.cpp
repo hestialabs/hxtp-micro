@@ -139,6 +139,8 @@ bool build_canonical_json(
         !is_ascii(hdr->device_id.c_str()) ||
         !is_ascii(hdr->message_id.c_str()) ||
         !is_ascii(hdr->nonce.c_str()) ||
+        !is_ascii(hdr->capability.c_str()) ||
+        !is_ascii(hdr->action.c_str()) ||
         !is_ascii(hdr->tenant_id.c_str())) 
     {
         return false; // Reject non-ASCII in signable header fields
@@ -156,6 +158,8 @@ bool build_canonical_json(
 
     int written = snprintf(out, out_cap,
         "{"
+        "\"action\":\"%s\","
+        "\"capability\":\"%s\","
         "\"client_id\":\"%s\","
         "\"device_id\":\"%s\","
         "\"message_id\":\"%s\","
@@ -170,6 +174,8 @@ bool build_canonical_json(
         "\"timestamp\":\"%lld\","
         "\"version\":\"%s\""
         "}",
+        hdr->action.c_str(),
+        hdr->capability.c_str(),
         hdr->client_id.c_str(),
         hdr->device_id.c_str(),
         hdr->message_id.c_str(),
