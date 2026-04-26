@@ -527,6 +527,8 @@ Error Core::parse_command_payload(InboundFrame* frame) {
     /* action */
     if (json_get_string(json, jlen, "action", buf, sizeof(buf), &blen)) {
         frame->command.action.set(buf, blen);
+    } else {
+        return Error::COMMAND_INVALID;
     }
 
     /* capability_id */
@@ -593,10 +595,6 @@ Error Core::process_inbound(
         /* Parse command-specific fields */
         err = parse_command_payload(&frame);
         if (err != Error::OK) return err;
-
-        if (frame.command.action.empty()) {
-            return Error::UNKNOWN_ACTION;
-        }
 
         /* Execute capability (Execution Safety Check) */
         CapabilityResult result = capabilities_.execute(
