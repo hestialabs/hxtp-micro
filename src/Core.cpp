@@ -709,7 +709,7 @@ Error Core::build_signed_json(
     );
     if (err != Error::OK) return err;
 
-    /* Build full outbound JSON (Lexicographical order matches canonical) */
+    /* Build full outbound JSON (Production Grade) */
     int written = snprintf(json_out, json_cap,
         "{"
         "\"client_id\":\"%s\","
@@ -719,11 +719,12 @@ Error Core::build_signed_json(
         "\"nonce\":\"%s\","
         "\"params\":%.*s,"
         "\"payload_hash\":\"%s\","
+        "\"protocol\":\"hxtp/1.0\","
         "\"request_id\":\"%s\","
-        "\"sequence_number\":%lld,"
+        "\"sequence_number\":\"%lld\","
         "\"signature\":\"%s\","
         "\"tenant_id\":\"%s\","
-        "\"timestamp\":%lld,"
+        "\"timestamp\":\"%lld\","
         "\"version\":\"%s\""
         "}",
         client_id_,

@@ -106,9 +106,11 @@ void ValidationContext::init() {
  * ════════════════════════════════════════════════════════════════════ */
 
 /**
- * Builds a strict Canonical JSON string of the signable message fields.
- * Lexicographical order:
- * client_id, device_id, message_id, message_type, nonce, params, payload_hash, request_id, sequence_number, tenant_id, timestamp, version
+ * Builds a strict Canonical JSON string (Production Grade).
+ * - Lexicographical order
+ * - Numbers as strings ("123.45")
+ * - Injects "protocol":"hxtp/1.0"
+ * - Rejects non-ASCII to avoid NFC ambiguity
  */
 bool build_canonical_json(
     const MessageHeader* hdr,
@@ -120,8 +122,35 @@ bool build_canonical_json(
 {
     if (!hdr || !out || out_cap == 0) return false;
 
-    // We build the JSON manually to avoid dynamic allocation, but ensure lexicographical order.
-    // NOTE: This must match the backend CanonicalJson output exactly.
+    // ── ASCII Enforcement Check ──────────────────
+    auto is_ascii = [](const char* s) {
+        if (!s) return true;
+        while (*s) {
+            if (static_cast<unsigned char>(*s) > 127) return false;
+            s++;
+        }
+        return true;
+    };
+
+    if (!is_ascii(hdr->client_id.c_str()) ||
+        !is_ascii(hdr->device_id.c_str()) ||
+        !is_ascii(hdr->message_id.c_str()) ||
+        !is_ascii(hdr->nonce.c_str()) ||
+        !is_ascii(hdr->tenant_id.c_str())) 
+    {
+        return false; // Reject non-ASCII in signable header fields
+    }
+
+    if (params_json && params_len > 0) {
+        for (uint32_t i = 0; i < params_len; i++) {
+            if (static_cast<unsigned char>(params_json[i]) > 127) return false;
+        }
+    }
+
+    // Numbers must be formatted as strings to match TS/Python strategy
+    // sequence_number: "123"
+    // timestamp: "1234567890"
+
     int written = snprintf(out, out_cap,
         "{"
         "\"client_id\":\"%s\","
@@ -131,10 +160,11 @@ bool build_canonical_json(
         "\"nonce\":\"%s\","
         "\"params\":%.*s,"
         "\"payload_hash\":\"%s\","
+        "\"protocol\":\"hxtp/1.0\","
         "\"request_id\":\"%s\","
-        "\"sequence_number\":%lld,"
+        "\"sequence_number\":\"%lld\","
         "\"tenant_id\":\"%s\","
-        "\"timestamp\":%lld,"
+        "\"timestamp\":\"%lld\","
         "\"version\":\"%s\""
         "}",
         hdr->client_id.c_str(),
