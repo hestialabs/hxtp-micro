@@ -795,9 +795,9 @@ Error Core::build_hello(
     /* HELLO payload includes firmware version and device type */
     char body[256];
     int blen = snprintf(body, sizeof(body),
-        "{\"firmware_version\":\"%s\",\"device_type\":\"%s\"}",
-        config_->firmware_version ? config_->firmware_version : "0.0.1",
-        config_->device_type ? config_->device_type : "esp32"
+        "{\"device_type\":\"%s\",\"firmware_version\":\"%s\"}",
+        config_->device_type ? config_->device_type : "esp32",
+        config_->firmware_version ? config_->firmware_version : "0.0.1"
     );
     if (blen < 0) return Error::BUFFER_OVERFLOW;
 
@@ -864,14 +864,14 @@ Error Core::build_ack(
     int blen;
     if (success) {
         blen = snprintf(body, sizeof(body),
-            "{\"ref_message_id\":\"%s\",\"ack_status\":\"executed\"}",
+            "{\"ack_status\":\"executed\",\"ref_message_id\":\"%s\"}",
             request_id ? request_id : ""
         );
     } else {
         blen = snprintf(body, sizeof(body),
-            "{\"ref_message_id\":\"%s\",\"ack_status\":\"failed\",\"error\":\"%s\"}",
-            request_id ? request_id : "",
-            error_msg ? error_msg : "UNKNOWN_ERROR"
+            "{\"ack_status\":\"failed\",\"error\":\"%s\",\"ref_message_id\":\"%s\"}",
+            error_msg ? error_msg : "UNKNOWN_ERROR",
+            request_id ? request_id : ""
         );
     }
     if (blen < 0) return Error::BUFFER_OVERFLOW;
