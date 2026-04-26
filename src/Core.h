@@ -97,6 +97,11 @@ bool json_get_raw(
     const char** out_ptr, size_t* out_len
 );
 
+/**
+ * Strip all whitespace from a JSON string to help with canonical hashing.
+ */
+void json_canonicalize(const char* in, char* out);
+
 /* ── Core Engine ────────────────────────────────────────────────────── */
 
 class Core {

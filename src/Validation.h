@@ -126,17 +126,21 @@ ValidationResult validate_signature(
 /* ── Canonical String Builder ───────────────────────────────────────── */
 
 /**
- * Build the canonical string for signature computation.
- * FROZEN FORMAT: version|message_type|device_id|tenant_id|timestamp|message_id|nonce
+ * Build the canonical JSON for signature computation.
+ * Order: client_id, device_id, message_id, message_type, nonce, params, payload_hash, request_id, sequence_number, tenant_id, timestamp, version
  *
- * @param hdr        Parsed message header
- * @param out        Output buffer
- * @param out_cap    Buffer capacity
- * @param out_len    Receives actual length
- * @return           true on success, false if buffer too small
+ * @param hdr         Parsed message header
+ * @param params_json Raw JSON of the params object
+ * @param params_len  Length of params_json
+ * @param out         Output buffer
+ * @param out_cap     Buffer capacity
+ * @param out_len     Receives actual length
+ * @return            true on success, false if buffer too small
  */
-bool build_canonical_string(
+bool build_canonical_json(
     const MessageHeader* hdr,
+    const char* params_json,
+    uint32_t params_len,
     char* out,
     size_t out_cap,
     size_t* out_len

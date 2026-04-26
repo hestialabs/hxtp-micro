@@ -263,6 +263,23 @@ bool json_get_bool(
     return false;
 }
 
+/**
+ * Strips all whitespace from a JSON string to help with canonical hashing.
+ * WARNING: Does NOT sort keys. User must ensure keys are sorted.
+ */
+void json_canonicalize(const char* in, char* out) {
+    bool in_quotes = false;
+    const char* p = in;
+    while (*p) {
+        if (*p == '"' && (p == in || *(p - 1) != '\\')) in_quotes = !in_quotes;
+        if (in_quotes || (*p != ' ' && *p != '\t' && *p != '\n' && *p != '\r')) {
+            *out++ = *p;
+        }
+        p++;
+    }
+    *out = '\0';
+}
+
 bool json_get_uint16(
     const char* json, size_t json_len,
     const char* key,
@@ -575,14 +592,13 @@ Error Core::process_inbound(
     if (frame.wire_type == MessageType::COMMAND) {
         /* Parse command-specific fields */
         err = parse_command_payload(&frame);
-        // cppcheck-suppress knownConditionTrueFalse
         if (err != Error::OK) return err;
 
         if (frame.command.action.empty()) {
             return Error::UNKNOWN_ACTION;
         }
 
-        /* Execute capability */
+        /* Execute capability (Execution Safety Check) */
         CapabilityResult result = capabilities_.execute(
             frame.command.action.c_str(),
             frame.params_ptr,
@@ -655,16 +671,18 @@ Error Core::build_signed_json(
     int64_t seq = next_sequence();
 
     /* Compute payload hash (SHA-256 of body/params JSON) */
+    /* NOTE: Embedded devices must ensure body_json is pre-canonicalized (sorted keys, no spaces) */
     const char* hash_input = (body_json && body_len > 0) ? body_json : "{}";
     uint32_t hash_input_len = (body_json && body_len > 0) ? body_len : 2;
     char payload_hash[Sha256HexLen + 1];
     err = crypto::sha256_hex(hash_input, hash_input_len, payload_hash);
     if (err != Error::OK) return err;
 
-    /* Build canonical string for signature */
+    /* Build canonical JSON for signature */
     MessageHeader hdr;
     hdr.version.set(VersionString);
     hdr.device_id.set(device_id_);
+    hdr.tenant_id.set(tenant_id_);
     hdr.client_id.set(client_id_);
     hdr.message_id.set(msg_id);
     hdr.request_id.set(msg_id); // Default RID=MID for outbound
@@ -674,9 +692,9 @@ Error Core::build_signed_json(
     hdr.message_type.set(message_type);
     hdr.payload_hash.set(payload_hash);
 
-    char canonical[512];
+    char canonical[1024];
     size_t canonical_len = 0;
-    if (!build_canonical_string(&hdr, canonical, sizeof(canonical), &canonical_len)) {
+    if (!build_canonical_json(&hdr, body_json, body_len, canonical, sizeof(canonical), &canonical_len)) {
         return Error::BUFFER_OVERFLOW;
     }
 
@@ -691,70 +709,41 @@ Error Core::build_signed_json(
     );
     if (err != Error::OK) return err;
 
-    /* Build JSON envelope.
-     * We construct it manually to avoid dynamic allocation. */
+    /* Build full outbound JSON (Lexicographical order matches canonical) */
     int written = snprintf(json_out, json_cap,
         "{"
-        "\"version\":\"%s\","
-        "\"message_type\":\"%s\","
-        "\"message_id\":\"%s\","
-        "\"request_id\":\"%s\","
-        "\"device_id\":\"%s\","
-        "\"tenant_id\":\"%s\","
         "\"client_id\":\"%s\","
-        "\"timestamp\":%lld,"
-        "\"sequence_number\":%lld,"
+        "\"device_id\":\"%s\","
+        "\"message_id\":\"%s\","
+        "\"message_type\":\"%s\","
         "\"nonce\":\"%s\","
+        "\"params\":%.*s,"
         "\"payload_hash\":\"%s\","
-        "\"signature\":\"%s\"",
-        VersionString,
-        message_type,
-        msg_id,
-        msg_id,
-        device_id_,
-        tenant_id_,
+        "\"request_id\":\"%s\","
+        "\"sequence_number\":%lld,"
+        "\"signature\":\"%s\","
+        "\"tenant_id\":\"%s\","
+        "\"timestamp\":%lld,"
+        "\"version\":\"%s\""
+        "}",
         client_id_,
-        static_cast<long long>(ts),
-        static_cast<long long>(seq),
+        device_id_,
+        msg_id,
+        message_type,
         nonce,
+        static_cast<int>(hash_input_len), hash_input,
         payload_hash,
-        signature
+        msg_id,
+        static_cast<long long>(seq),
+        signature,
+        tenant_id_,
+        static_cast<long long>(ts),
+        VersionString
     );
 
-    if (written < 0 || static_cast<size_t>(written) >= json_cap) {
-        return Error::BUFFER_OVERFLOW;
-    }
+    if (written < 0 || static_cast<size_t>(written) >= json_cap) return Error::BUFFER_OVERFLOW;
+    if (json_len) *json_len = static_cast<size_t>(written);
 
-    /* Append body if present */
-    size_t pos = static_cast<size_t>(written);
-
-    if (body_json && body_len > 0) {
-        /* Determine key based on message type */
-        const char* body_key = "params";
-        if (strcmp(message_type, MessageTypeStr::STATE) == 0) {
-            body_key = "state";
-        } else if (strcmp(message_type, MessageTypeStr::TELEMETRY) == 0) {
-            body_key = "data";
-        } else if (strcmp(message_type, MessageTypeStr::ACK) == 0) {
-            body_key = "result";
-        }
-
-        int extra = snprintf(json_out + pos, json_cap - pos,
-                             ",\"%s\":%.*s",
-                             body_key,
-                             static_cast<int>(body_len), body_json);
-        if (extra < 0 || pos + static_cast<size_t>(extra) >= json_cap) {
-            return Error::BUFFER_OVERFLOW;
-        }
-        pos += static_cast<size_t>(extra);
-    }
-
-    /* Close object */
-    if (pos + 2 > json_cap) return Error::BUFFER_OVERFLOW;
-    json_out[pos++] = '}';
-    json_out[pos]   = '\0';
-
-    *json_len = pos;
     return Error::OK;
 }
 

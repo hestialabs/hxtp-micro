@@ -105,58 +105,54 @@ void ValidationContext::init() {
  *  Canonical String Builder
  * ════════════════════════════════════════════════════════════════════ */
 
-bool build_canonical_string(
+/**
+ * Builds a strict Canonical JSON string of the signable message fields.
+ * Lexicographical order:
+ * client_id, device_id, message_id, message_type, nonce, params, payload_hash, request_id, sequence_number, tenant_id, timestamp, version
+ */
+bool build_canonical_json(
     const MessageHeader* hdr,
+    const char* params_json,
+    uint32_t params_len,
     char* out,
     size_t out_cap,
     size_t* out_len)
 {
     if (!hdr || !out || out_cap == 0) return false;
 
-    /* 
-     * MCSS v3.0 FROZEN FORMAT (10 fields):
-     * version|did|cid|mid|rid|seq|ts|nonce|mtype|phash
-     *
-     * Matches Helix Cloud Canonical.ts and Helix Control App.
-     */
+    // We build the JSON manually to avoid dynamic allocation, but ensure lexicographical order.
+    // NOTE: This must match the backend CanonicalJson output exactly.
+    int written = snprintf(out, out_cap,
+        "{"
+        "\"client_id\":\"%s\","
+        "\"device_id\":\"%s\","
+        "\"message_id\":\"%s\","
+        "\"message_type\":\"%s\","
+        "\"nonce\":\"%s\","
+        "\"params\":%.*s,"
+        "\"payload_hash\":\"%s\","
+        "\"request_id\":\"%s\","
+        "\"sequence_number\":%lld,"
+        "\"tenant_id\":\"%s\","
+        "\"timestamp\":%lld,"
+        "\"version\":\"%s\""
+        "}",
+        hdr->client_id.c_str(),
+        hdr->device_id.c_str(),
+        hdr->message_id.c_str(),
+        hdr->message_type.c_str(),
+        hdr->nonce.c_str(),
+        static_cast<int>(params_len > 0 ? params_len : 2), (params_json && params_len > 0) ? params_json : "{}",
+        hdr->payload_hash.c_str(),
+        hdr->request_id.c_str(),
+        static_cast<long long>(hdr->sequence_number),
+        hdr->tenant_id.c_str(),
+        static_cast<long long>(hdr->timestamp),
+        hdr->version.c_str()
+    );
 
-    char ts_buf[24];
-    int ts_len = snprintf(ts_buf, sizeof(ts_buf), "%lld", static_cast<long long>(hdr->timestamp));
-    if (ts_len < 0) ts_len = 0;
-
-    char seq_buf[24];
-    int seq_len = snprintf(seq_buf, sizeof(seq_buf), "%lld", static_cast<long long>(hdr->sequence_number));
-    if (seq_len < 0) seq_len = 0;
-
-    /* Build the canonical string with pipe separators */
-    char* p = out;
-    size_t current_len = 0;
-
-    auto append = [&](const char* s, size_t len, bool last = false) -> bool {
-        if (current_len + len + (last ? 0 : 1) >= out_cap) return false;
-        memcpy(p, s, len);
-        p += len;
-        current_len += len;
-        if (!last) {
-            *p++ = CanonicalSep;
-            current_len++;
-        }
-        return true;
-    };
-
-    if (!append(hdr->version.c_str(), hdr->version.len)) return false;
-    if (!append(hdr->device_id.c_str(), hdr->device_id.len)) return false;
-    if (!append(hdr->client_id.c_str(), hdr->client_id.len)) return false;
-    if (!append(hdr->message_id.c_str(), hdr->message_id.len)) return false;
-    if (!append(hdr->request_id.c_str(), hdr->request_id.len)) return false;
-    if (!append(seq_buf, static_cast<size_t>(seq_len))) return false;
-    if (!append(ts_buf, static_cast<size_t>(ts_len))) return false;
-    if (!append(hdr->nonce.c_str(), hdr->nonce.len)) return false;
-    if (!append(hdr->message_type.c_str(), hdr->message_type.len)) return false;
-    if (!append(hdr->payload_hash.c_str(), hdr->payload_hash.len, true)) return false;
-
-    *p = '\0';
-    *out_len = current_len;
+    if (written < 0 || static_cast<size_t>(written) >= out_cap) return false;
+    if (out_len) *out_len = static_cast<size_t>(written);
     return true;
 }
 
@@ -198,19 +194,17 @@ ValidationResult validate_timestamp(const InboundFrame* frame, int64_t now_ms) {
 
     int64_t age_sec = now_sec - ts_sec;
 
-    /* Too old */
-    if (age_sec > static_cast<int64_t>(MaxMessageAgeSec)) {
+    /* Strict 30s window */
+    if (age_sec > 30) {
         return ValidationResult::fail(
             ValidationStep::TimestampCheck,
-            "TIMESTAMP_EXPIRED: message too old"
+            "TIMESTAMP_EXPIRED: message too old (>30s)"
         );
     }
-
-    /* Too far in the future (clock drift protection) */
-    if (ts_sec > now_sec + static_cast<int64_t>(TimestampSkewSec)) {
+    if (age_sec < -30) {
         return ValidationResult::fail(
             ValidationStep::TimestampCheck,
-            "TIMESTAMP_FUTURE: message timestamp from future"
+            "TIMESTAMP_FUTURE: clock skew exceeds 30s"
         );
     }
 
@@ -331,13 +325,13 @@ ValidationResult validate_signature(
         );
     }
 
-    /* Build canonical string */
-    char canonical[512];
+    /* Build canonical JSON */
+    char canonical[1024];
     size_t canonical_len = 0;
-    if (!build_canonical_string(&frame->header, canonical, sizeof(canonical), &canonical_len)) {
+    if (!build_canonical_json(&frame->header, frame->params_ptr, frame->params_len, canonical, sizeof(canonical), &canonical_len)) {
         return ValidationResult::fail(
             ValidationStep::SignatureCheck,
-            "CANONICAL_BUILD_FAILED: could not build canonical string"
+            "CANONICAL_BUILD_FAILED: could not build canonical JSON"
         );
     }
 
@@ -355,12 +349,8 @@ ValidationResult validate_signature(
         );
     }
 
-    /* Constant-time compare (CRITICAL — timing side-channel protection) */
-    if (crypto::constant_time_hex_equal(
-            computed_hex,
-            frame->header.signature.c_str(),
-            HmacHexLen))
-    {
+    /* Constant-time compare */
+    if (crypto::constant_time_hex_equal(computed_hex, frame->header.signature.c_str(), HmacHexLen)) {
         return ValidationResult::ok();
     }
 

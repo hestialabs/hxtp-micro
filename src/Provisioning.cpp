@@ -83,7 +83,7 @@ void Provisioning::handleClaim() {
     ok &= json_get_string(json, jlen, "wifi_pass", pass, sizeof(pass), nullptr);
     ok &= json_get_string(json, jlen, "tenant_id", tenant, sizeof(tenant), nullptr);
     ok &= json_get_string(json, jlen, "device_id", device, sizeof(device), nullptr);
-    ok &= json_get_string(json, jlen, "secret_hex", secret_hex, sizeof(secret_hex), nullptr);
+    ok &= json_get_string(json, jlen, "device_secret", secret_hex, sizeof(secret_hex), nullptr);
 
     if (!ok) {
         server_.send(400, "application/json", "{\"error\":\"INVALID_JSON_OR_FIELDS\"}");
