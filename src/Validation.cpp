@@ -19,6 +19,9 @@
 #include "Crypto.h"
 #include <cstdio>     /* snprintf */
 #include <cstring>    /* strcmp, memset */
+#include <ArduinoJson.h>
+#include <vector>
+#include <algorithm>
 
 namespace hxtp {
 
@@ -280,6 +283,50 @@ ValidationResult validate_nonce(
 
 /* ── Step 5: Payload Hash ────────────────────────────────────────── */
 
+static void canonicalize_variant(JsonVariantConst src, JsonVariant dst) {
+    if (src.is<JsonObjectConst>()) {
+        JsonObjectConst srcObj = src.as<JsonObjectConst>();
+        JsonObject dstObj = dst.to<JsonObject>();
+        
+        std::vector<const char*> keys;
+        for (JsonPairConst kv : srcObj) {
+            keys.push_back(kv.key().c_str());
+        }
+        std::sort(keys.begin(), keys.end(), [](const char* a, const char* b) {
+            return strcmp(a, b) < 0;
+        });
+        
+        for (const char* k : keys) {
+            canonicalize_variant(srcObj[k], dstObj[k]);
+        }
+    } else if (src.is<JsonArrayConst>()) {
+        JsonArrayConst srcArr = src.as<JsonArrayConst>();
+        JsonArray dstArr = dst.to<JsonArray>();
+        for (JsonVariantConst elem : srcArr) {
+            canonicalize_variant(elem, dstArr.add<JsonVariant>());
+        }
+    } else if (src.is<float>() || src.is<double>() || src.is<long>() || src.is<int>()) {
+        double d = src.as<double>();
+        char temp[64];
+        snprintf(temp, sizeof(temp), "%.20f", d);
+        int end = strlen(temp) - 1;
+        while (end >= 0 && temp[end] == '0') {
+            temp[end] = '\0';
+            end--;
+        }
+        if (end >= 0 && temp[end] == '.') {
+            temp[end] = '\0';
+            end--;
+        }
+        if (temp[0] == '\0' || (temp[0] == '-' && temp[1] == '0' && temp[2] == '\0')) {
+            strcpy(temp, "0");
+        }
+        dst.set(String(temp));
+    } else {
+        dst.set(src);
+    }
+}
+
 ValidationResult validate_payload_hash(const InboundFrame* frame) {
     /* If no payload_hash provided, skip (matches server behavior —
      * server checks "if (Msg.payload_hash)") */
@@ -287,8 +334,6 @@ ValidationResult validate_payload_hash(const InboundFrame* frame) {
         return ValidationResult::ok();
     }
 
-    /* If no params payload, the hash should be of "{}" (empty JSON object).
-     * We compute SHA-256 of the raw params JSON. */
     const char* params = frame->params_ptr;
     uint32_t    plen   = frame->params_len;
 
@@ -299,8 +344,23 @@ ValidationResult validate_payload_hash(const InboundFrame* frame) {
         plen   = 2;
     }
 
+    JsonDocument doc;
+    DeserializationError derr = deserializeJson(doc, params, plen);
+    if (derr) {
+        return ValidationResult::fail(
+            ValidationStep::PayloadHashCheck,
+            "JSON_PARSE_FAILED: could not parse params"
+        );
+    }
+
+    JsonDocument sortedDoc;
+    canonicalize_variant(doc, sortedDoc);
+    
+    String canonicalParams;
+    serializeJson(sortedDoc, canonicalParams);
+
     char computed_hex[Sha256HexLen + 1];
-    Error err = crypto::sha256_hex(params, plen, computed_hex);
+    Error err = crypto::sha256_hex(canonicalParams.c_str(), canonicalParams.length(), computed_hex);
     if (err != Error::OK) {
         return ValidationResult::fail(
             ValidationStep::PayloadHashCheck,
