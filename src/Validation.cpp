@@ -110,7 +110,7 @@ void ValidationContext::init() {
  * ════════════════════════════════════════════════════════════════════ */
 
 /**
- * Builds a strict Canonical JSON string (Production Grade).
+ * Builds a strict Canonical JSON string ().
  * - Lexicographical order
  * - Numbers as strings ("123.45")
  * - Injects "protocol":"hxtp/3.0"
