@@ -234,17 +234,17 @@ ValidationResult validate_timestamp(const InboundFrame* frame, int64_t now_ms) {
 
     int64_t age_sec = now_sec - ts_sec;
 
-    /* Strict 30s window */
-    if (age_sec > 30) {
+    /* Strict window enforcement using constants from Types.h */
+    if (age_sec > static_cast<int64_t>(MaxMessageAgeSec)) {
         return ValidationResult::fail(
             ValidationStep::TimestampCheck,
-            "TIMESTAMP_EXPIRED: message too old (>30s)"
+            "TIMESTAMP_EXPIRED: message too old"
         );
     }
-    if (age_sec < -30) {
+    if (age_sec < -static_cast<int64_t>(TimestampSkewSec)) {
         return ValidationResult::fail(
             ValidationStep::TimestampCheck,
-            "TIMESTAMP_FUTURE: clock skew exceeds 30s"
+            "TIMESTAMP_FUTURE: clock skew exceeds limit"
         );
     }
 

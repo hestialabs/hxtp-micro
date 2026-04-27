@@ -21,8 +21,8 @@
 
 static constexpr uint8_t  Magic[2]           = { 0x48, 0x58 };   /* "HX" */
 static constexpr uint8_t  FramerVersion      = 3;
-static constexpr uint8_t  ProtocolMajor      = 0;
-static constexpr uint8_t  ProtocolMinor      = 1;
+static constexpr uint8_t  ProtocolMajor      = 3;
+static constexpr uint8_t  ProtocolMinor      = 0;
 
 static constexpr char     VersionString[]    = "HxTP/3.0";
 static constexpr char     CanonicalSep       = '|';
@@ -31,8 +31,8 @@ static constexpr uint8_t  HeaderSize         = 8;
 
 /* ── Validation Limits ──────────────────────────────────────────────── */
 
-static constexpr uint32_t MaxMessageAgeSec  = 300;   /* 5 minutes */
-static constexpr uint32_t TimestampSkewSec  = 60;    /* 1 minute future */
+static constexpr uint32_t MaxMessageAgeSec  = 30;    /* 30 seconds */
+static constexpr uint32_t TimestampSkewSec  = 5;     /* 5 seconds future */
 static constexpr uint32_t NonceTtlSec       = 600;   /* 10 minutes */
 static constexpr uint32_t MaxPayloadBytes   = 16384; /* 16 KB hard limit */
 
