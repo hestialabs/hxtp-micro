@@ -190,6 +190,8 @@ struct MessageHeader {
     FixedStr<16>                 message_type;
     FixedStr<Sha256HexLen>     payload_hash;
     FixedStr<HmacHexLen>       signature;
+    FixedStr<32>                 capability;
+    FixedStr<32>                 action;
 };
 
 /* ── Parsed Command Payload ─────────────────────────────────────────── */

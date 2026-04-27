@@ -436,6 +436,16 @@ Error Core::parse_json_header(InboundFrame* frame) {
     if (json_get_string(json, jlen, "message_type", buf, sizeof(buf), &blen)) {
         frame->header.message_type.set(buf, blen);
     }
+    
+    /* capability */
+    if (json_get_string(json, jlen, "capability", buf, sizeof(buf), &blen)) {
+        frame->header.capability.set(buf, blen);
+    }
+    
+    /* action */
+    if (json_get_string(json, jlen, "action", buf, sizeof(buf), &blen)) {
+        frame->header.action.set(buf, blen);
+    }
 
     /* device_id */
     if (json_get_string(json, jlen, "device_id", buf, sizeof(buf), &blen)) {
@@ -481,16 +491,6 @@ Error Core::parse_json_header(InboundFrame* frame) {
         frame->header.sequence_number = seq;
     } else {
         frame->header.sequence_number = -1;
-    }
-
-    /* client_id */
-    if (json_get_string(json, jlen, "client_id", buf, sizeof(buf), &blen)) {
-        frame->header.client_id.set(buf, blen);
-    }
-
-    /* request_id */
-    if (json_get_string(json, jlen, "request_id", buf, sizeof(buf), &blen)) {
-        frame->header.request_id.set(buf, blen);
     }
 
     /* payload_hash */

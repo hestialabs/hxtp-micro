@@ -22,6 +22,7 @@
 #include <ArduinoJson.h>
 #include <vector>
 #include <algorithm>
+#include <iterator>
 
 namespace hxtp {
 
@@ -295,9 +296,9 @@ static void canonicalize_variant(JsonVariantConst src, JsonVariant dst) {
         JsonObject dstObj = dst.to<JsonObject>();
         
         std::vector<const char*> keys;
-        for (JsonPairConst kv : srcObj) {
-            keys.push_back(kv.key().c_str());
-        }
+        std::transform(srcObj.begin(), srcObj.end(), std::back_inserter(keys), [](JsonPairConst kv) {
+            return kv.key().c_str();
+        });
         std::sort(keys.begin(), keys.end(), [](const char* a, const char* b) {
             return strcmp(a, b) < 0;
         });
