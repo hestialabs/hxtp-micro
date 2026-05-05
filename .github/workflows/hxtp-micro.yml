@@ -107,7 +107,7 @@ jobs:
         uses: arduino/arduino-lint-action@v2
         with:
           path: hxtp-micro
-          library-manager: update
+          library-manager: submit
           compliance: strict
           project-type: library
 
