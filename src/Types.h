@@ -274,7 +274,7 @@ struct Config {
     const char*  wifi_password;
 
     /* Provisioning Payload / Bootstrap */
-    const char*  api_base_url;   /* e.g. "https://cloud.hestialabs.in/api/v1" */
+    const char*  api_base_url;   /* e.g. "https://dash.hestialabs.in/api/v1" */
     const char*  device_id;      /* 32-char hex */
     const char*  tenant_id;      /* UUID */
     const char*  device_secret;  /* 64-char hex */
