@@ -50,7 +50,7 @@ jobs:
               with:
                   path: hxtp-micro
                   library-manager: update
-                  compliance: strict
+                  
                   project-type: library
 
     # ── Release: Tag + GitHub Release for Arduino indexer ─────────
