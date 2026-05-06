@@ -1,40 +1,94 @@
 # ═══════════════════════════════════════════════════════════════════
-#  HXTP Embedded SDK — Arduino Library Release Pipeline
+#  hxTP Embedded SDK — Unified CI/CD Pipeline
 #
-#  • Validates library compliance with arduino-lint on every push/PR
-#  • On tag push (v*): extracts version from tag and creates GitHub Release
-#  • Arduino Library Manager indexer picks up releases automatically (checks every hour)
-#
-#  Usage:
-#    git tag v1.0.0
-#    git push origin v1.0.0
-#    → Triggers lint + creates GitHub Release → Arduino indexer picks it up
-#
-#  Prerequisites:
-#    1. Register the library once by submitting a PR to
-#       https://github.com/arduino/library-registry adding your
-#       repo URL to repositories.txt
-#    2. After that, every tagged release is auto-indexed
+#  • Builds ESP32-S3 and ESP32 targets using PlatformIO
+#  • Performs static analysis with arduino-lint and cppcheck
+#  • Auto-releases to GitHub on tag push (v*) for Arduino Library Manager
 #
 #  Copyright (c) 2026 Hestia Labs
 # ═══════════════════════════════════════════════════════════════════
 
-name: Arduino Library Release
+name: Library Pipeline
 
 env:
     FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
     push:
+        branches: [main, develop]
+        paths:
+            - "src/**"
+            - "platformio.ini"
+            - "library.properties"
+            - ".github/workflows/**"
         tags: ["v*"]
     pull_request:
         branches: [main]
         paths:
             - "src/**"
+            - "platformio.ini"
             - "library.properties"
-            - ".github/workflows/arduino.yml"
+            - ".github/workflows/**"
 
 jobs:
+    # ── Build: ESP32-S3 (primary target) ─────────────────────────────
+    build-esp32s3:
+        name: Build ESP32-S3
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  path: hxtp-micro
+
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.12"
+
+            - name: Cache PlatformIO packages
+              uses: actions/cache@v4
+              with:
+                  path: ~/.platformio
+                  key: ${{ runner.os }}-pio-esp32s3-${{ hashFiles('hxtp-micro/platformio.ini') }}
+                  restore-keys: |
+                      ${{ runner.os }}-pio-esp32s3-
+
+            - name: Install PlatformIO Core
+              run: pip install --quiet platformio
+
+            - name: Compile for ESP32-S3
+              run: cd hxtp-micro && pio run -e esp32s3
+
+    # ── Build: ESP32-WROOM (tier-2 target) ───────────────────────────
+    build-esp32:
+        name: Build ESP32-WROOM
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  path: hxtp-micro
+
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.12"
+
+            - name: Cache PlatformIO packages
+              uses: actions/cache@v4
+              with:
+                  path: ~/.platformio
+                  key: ${{ runner.os }}-pio-esp32-${{ hashFiles('hxtp-micro/platformio.ini') }}
+                  restore-keys: |
+                      ${{ runner.os }}-pio-esp32-
+
+            - name: Install PlatformIO Core
+              run: pip install --quiet platformio
+
+            - name: Compile for ESP32-WROOM
+              run: cd hxtp-micro && pio run -e esp32
+
     # ── Lint: Arduino Library Specification compliance ────────────
     lint:
         name: Arduino Lint
@@ -49,14 +103,37 @@ jobs:
               uses: arduino/arduino-lint-action@v2
               with:
                   path: hxtp-micro
-                  library-manager: submit
-                  compliance : strict
+                  compliance: strict
                   project-type: library
 
-    # ── Release: Tag + GitHub Release for Arduino indexer ─────────
+    # ── Static Analysis: cppcheck ────────────────────────────────────
+    cppcheck:
+        name: cppcheck Static Analysis
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  path: hxtp-micro
+
+            - name: Install cppcheck
+              run: sudo apt-get install -y --no-install-recommends cppcheck
+
+            - name: Run cppcheck on HXTP library
+              run: |
+                  cppcheck \
+                    --enable=warning,style,performance,portability \
+                    --suppress=missingIncludeSystem \
+                    --error-exitcode=1 \
+                    --inline-suppr \
+                    --std=c++17 \
+                    -I hxtp-micro/src \
+                    hxtp-micro/src/
+
+    # ── Release ─────────
     release:
-        name: Release to Arduino Library Manager
-        needs: lint
+        name: Release
+        needs: [build-esp32s3, build-esp32, lint, cppcheck]
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         runs-on: ubuntu-latest
         permissions:
@@ -84,7 +161,7 @@ jobs:
                   cd ..
                   ls -lh "$NAME-$VERSION.zip"
 
-            - name: Create GitHub Release (triggered by tag push)
+            - name: Create GitHub Release
               uses: softprops/action-gh-release@v2
               with:
                   tag_name: ${{ steps.version.outputs.tag }}
@@ -114,3 +191,11 @@ jobs:
                       ---
                       Commit: `${{ github.sha }}`
                   make_latest: true
+
+            - name: Publish to PlatformIO Registry
+              env:
+                  PLATFORMIO_AUTH_TOKEN: ${{ secrets.PLATFORMIO_AUTH_TOKEN }}
+              run: |
+                  cd hxtp-micro
+                  pip install --quiet platformio
+                  pio pkg publish --non-interactive
