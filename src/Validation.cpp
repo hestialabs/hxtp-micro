@@ -140,6 +140,14 @@ static size_t escape_field(const char* src, char* dst, size_t dst_cap) {
  * Builds the HxTP canonical string for signature verification.
  * Support HxTP/3.0 (JSON) and HxTP/3.1 (Pipe-separated with escaping).
  */
+bool build_canonical_params(
+    const char* params_json,
+    uint32_t params_len,
+    char* out,
+    size_t out_cap,
+    size_t* out_len
+);
+
 bool build_canonical_string(
     const MessageHeader* hdr,
     const char* params_json,
@@ -152,7 +160,6 @@ bool build_canonical_string(
 
     if (hdr->version.equals("HxTP/3.1")) {
         // ── HxTP/3.1: Pipe-separated with Escaping ──────────
-        char buf[256];
         size_t total = 0;
         
         auto append_field = [&](const char* f, bool last = false) -> bool {
@@ -183,11 +190,36 @@ bool build_canonical_string(
         if (out_len) *out_len = total;
         return true;
     } else {
-		// ── HxTP/3.0: Deterministic JSON (Legacy Fallback) ──
-		// For brevity in Micro SDK, we assume the server provides 
-		// the canonical JSON or the client knows how to build it.
-		// (In reality, we'd use ArduinoJson here too).
-		return false; // Deprecated Mode
+        // ── HxTP/3.0: Deterministic JSON (Legacy Fallback) ──
+        JsonDocument doc;
+        doc["client_id"] = hdr->client_id.c_str();
+        doc["device_id"] = hdr->device_id.c_str();
+        doc["message_id"] = hdr->message_id.c_str();
+        doc["message_type"] = hdr->message_type.c_str();
+        doc["nonce"] = hdr->nonce.c_str();
+        
+        if (params_json && params_len > 0) {
+            JsonDocument paramsDoc;
+            deserializeJson(paramsDoc, params_json, params_len);
+            doc["params"] = paramsDoc.as<JsonVariant>();
+        } else {
+            doc["params"] = JsonObject();
+        }
+        
+        doc["payload_hash"] = hdr->payload_hash.c_str();
+        doc["protocol"] = "hxtp/3.0";
+        doc["request_id"] = hdr->request_id.c_str();
+        doc["sequence_number"] = hdr->sequence_number;
+        doc["tenant_id"] = hdr->tenant_id.c_str();
+        doc["timestamp"] = hdr->timestamp;
+        doc["version"] = hdr->version.c_str();
+
+        JsonDocument sortedDoc;
+        canonicalize_variant(doc.as<JsonVariant>(), sortedDoc.as<JsonVariant>());
+        
+        size_t written = serializeJson(sortedDoc, out, out_cap);
+        if (out_len) *out_len = written;
+        return written < out_cap;
     }
 }
 
@@ -285,6 +317,34 @@ ValidationResult validate_nonce(
 
 /* ── Step 5: Payload Hash ────────────────────────────────────────── */
 
+bool build_canonical_params(
+    const char* params_json,
+    uint32_t params_len,
+    char* out,
+    size_t out_cap,
+    size_t* out_len)
+{
+    if (!params_json || !out || out_cap == 0) return false;
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, params_json, params_len);
+    if (err) {
+        /* If not a valid JSON object/array, treat as literal if possible, or fail */
+        if (params_len == 0 || (params_len == 2 && strcmp(params_json, "{}") == 0)) {
+            doc.to<JsonObject>();
+        } else {
+            return false;
+        }
+    }
+
+    JsonDocument sortedDoc;
+    canonicalize_variant(doc.as<JsonVariantConst>(), sortedDoc.as<JsonVariant>());
+
+    size_t written = serializeJson(sortedDoc, out, out_cap);
+    if (out_len) *out_len = written;
+    return (written < out_cap);
+}
+
 static void canonicalize_variant(JsonVariantConst src, JsonVariant dst) {
     if (src.is<JsonObjectConst>()) {
         JsonObjectConst srcObj = src.as<JsonObjectConst>();
@@ -346,23 +406,17 @@ ValidationResult validate_payload_hash(const InboundFrame* frame) {
         plen   = 2;
     }
 
-    JsonDocument doc;
-    DeserializationError derr = deserializeJson(doc, params, plen);
-    if (derr) {
+    char canonical_params[1024];
+    size_t cp_len = 0;
+    if (!build_canonical_params(params, plen, canonical_params, sizeof(canonical_params), &cp_len)) {
         return ValidationResult::fail(
             ValidationStep::PayloadHashCheck,
-            "JSON_PARSE_FAILED: could not parse params"
+            "CANONICAL_BUILD_FAILED: could not build canonical params"
         );
     }
 
-    JsonDocument sortedDoc;
-    canonicalize_variant(doc, sortedDoc);
-    
-    String canonicalParams;
-    serializeJson(sortedDoc, canonicalParams);
-
     char computed_hex[Sha256HexLen + 1];
-    Error err = crypto::sha256_hex(canonicalParams.c_str(), canonicalParams.length(), computed_hex);
+    Error err = crypto::sha256_hex(canonical_params, cp_len, computed_hex);
     if (err != Error::OK) {
         return ValidationResult::fail(
             ValidationStep::PayloadHashCheck,

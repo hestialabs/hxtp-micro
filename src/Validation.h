@@ -137,7 +137,15 @@ ValidationResult validate_signature(
  * @param out_len     Receives actual length
  * @return            true on success, false if buffer too small
  */
-bool build_canonical_json(
+bool build_canonical_params(
+    const char* params_json,
+    uint32_t params_len,
+    char* out,
+    size_t out_cap,
+    size_t* out_len
+);
+
+bool build_canonical_string(
     const MessageHeader* hdr,
     const char* params_json,
     uint32_t params_len,

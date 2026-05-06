@@ -668,13 +668,21 @@ Error Core::build_signed_json(
     int64_t ts  = platform_->get_epoch_ms();
     int64_t seq = next_sequence();
 
-    /* Compute payload hash (SHA-256 of body/params JSON) */
-    /* NOTE: Embedded devices must ensure body_json is pre-canonicalized (sorted keys, no spaces) */
-    const char* hash_input = (body_json && body_len > 0) ? body_json : "{}";
-    uint32_t hash_input_len = (body_json && body_len > 0) ? body_len : 2;
+    /* Compute payload hash (SHA-256 of canonicalized params JSON) */
     char payload_hash[Sha256HexLen + 1];
-    err = crypto::sha256_hex(hash_input, hash_input_len, payload_hash);
-    if (err != Error::OK) return err;
+    {
+        const char* hash_input = (body_json && body_len > 0) ? body_json : "{}";
+        uint32_t hash_input_len = (body_json && body_len > 0) ? body_len : 2;
+
+        /* Canonicalize params for hashing (matches CanonicalParamsJson in other SDKs) */
+        char canonical_params[1024];
+        size_t cp_len = 0;
+        if (!build_canonical_params(hash_input, hash_input_len, canonical_params, sizeof(canonical_params), &cp_len)) {
+            return Error::BUFFER_OVERFLOW;
+        }
+        err = crypto::sha256_hex(canonical_params, cp_len, payload_hash);
+        if (err != Error::OK) return err;
+    }
 
     /* Build canonical JSON for signature */
     MessageHeader hdr;
@@ -692,7 +700,7 @@ Error Core::build_signed_json(
 
     char canonical[1024];
     size_t canonical_len = 0;
-    if (!build_canonical_json(&hdr, body_json, body_len, canonical, sizeof(canonical), &canonical_len)) {
+    if (!build_canonical_string(&hdr, body_json, body_len, canonical, sizeof(canonical), &canonical_len)) {
         return Error::BUFFER_OVERFLOW;
     }
 
