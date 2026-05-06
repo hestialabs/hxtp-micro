@@ -110,10 +110,7 @@ void ValidationContext::init() {
  * ════════════════════════════════════════════════════════════════════ */
 
 /**
- * Builds a strict Canonical JSON string ().
- * - Lexicographical order
- * - Numbers as strings ("123.45")
- * - Injects "protocol":"hxtp/3.0"
+ * Builds the HxTP/3.1 10-field pipe canonical string.
  * - Rejects non-ASCII to avoid NFC ambiguity
  */
 bool build_canonical_json(
@@ -153,42 +150,18 @@ bool build_canonical_json(
         }
     }
 
-    // Numbers must be formatted as strings to match TS/Python strategy
-    // sequence_number: "123"
-    // timestamp: "1234567890"
-
     int written = snprintf(out, out_cap,
-        "{"
-        "\"action\":\"%s\","
-        "\"capability\":\"%s\","
-        "\"client_id\":\"%s\","
-        "\"device_id\":\"%s\","
-        "\"message_id\":\"%s\","
-        "\"message_type\":\"%s\","
-        "\"nonce\":\"%s\","
-        "\"params\":%.*s,"
-        "\"payload_hash\":\"%s\","
-        "\"protocol\":\"hxtp/3.0\","
-        "\"request_id\":\"%s\","
-        "\"sequence_number\":\"%lld\","
-        "\"tenant_id\":\"%s\","
-        "\"timestamp\":\"%lld\","
-        "\"version\":\"%s\""
-        "}",
-        hdr->action.c_str(),
-        hdr->capability.c_str(),
-        hdr->client_id.c_str(),
+        "%s|%s|%s|%s|%s|%lld|%lld|%s|%s|%s",
+        hdr->version.c_str(),
         hdr->device_id.c_str(),
+        hdr->client_id.c_str(),
         hdr->message_id.c_str(),
-        hdr->message_type.c_str(),
-        hdr->nonce.c_str(),
-        static_cast<int>(params_len > 0 ? params_len : 2), (params_json && params_len > 0) ? params_json : "{}",
-        hdr->payload_hash.c_str(),
         hdr->request_id.c_str(),
         static_cast<long long>(hdr->sequence_number),
-        hdr->tenant_id.c_str(),
         static_cast<long long>(hdr->timestamp),
-        hdr->version.c_str()
+        hdr->nonce.c_str(),
+        hdr->message_type.c_str(),
+        hdr->payload_hash.c_str()
     );
 
     if (written < 0 || static_cast<size_t>(written) >= out_cap) return false;

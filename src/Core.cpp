@@ -719,10 +719,10 @@ Error Core::build_signed_json(
         "\"payload_hash\":\"%s\","
         "\"protocol\":\"hxtp/3.0\","
         "\"request_id\":\"%s\","
-        "\"sequence_number\":\"%lld\","
+        "\"sequence_number\":%lld,"
         "\"signature\":\"%s\","
         "\"tenant_id\":\"%s\","
-        "\"timestamp\":\"%lld\","
+        "\"timestamp\":%lld,"
         "\"version\":\"%s\""
         "}",
         client_id_,

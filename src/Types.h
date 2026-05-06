@@ -24,7 +24,7 @@ static constexpr uint8_t  FramerVersion      = 3;
 static constexpr uint8_t  ProtocolMajor      = 3;
 static constexpr uint8_t  ProtocolMinor      = 0;
 
-static constexpr char     VersionString[]    = "HxTP/3.0";
+static constexpr char     VersionString[]    = "HxTP/3.1";
 static constexpr char     CanonicalSep       = '|';
 
 static constexpr uint8_t  HeaderSize         = 8;
@@ -33,7 +33,7 @@ static constexpr uint8_t  HeaderSize         = 8;
 
 static constexpr uint32_t MaxMessageAgeSec  = 30;    /* 30 seconds */
 static constexpr uint32_t TimestampSkewSec  = 5;     /* 5 seconds future */
-static constexpr uint32_t NonceTtlSec       = 600;   /* 10 minutes */
+static constexpr uint32_t NonceTtlSec       = 60;    /* 1 minute */
 static constexpr uint32_t MaxPayloadBytes   = 16384; /* 16 KB hard limit */
 
 /* Frame buffer: overridable from Config.h */
