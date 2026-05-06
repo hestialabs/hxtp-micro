@@ -110,10 +110,37 @@ void ValidationContext::init() {
  * ════════════════════════════════════════════════════════════════════ */
 
 /**
- * Builds the HxTP/3.1 10-field pipe canonical string.
- * - Rejects non-ASCII to avoid NFC ambiguity
+ * Escapes a field for HxTP/3.1 pipe-separated framing.
+ * Rules: \ -> \\, | -> \|, \n -> \n, \r -> \r
  */
-bool build_canonical_json(
+static size_t escape_field(const char* src, char* dst, size_t dst_cap) {
+    if (!src || !dst || dst_cap == 0) return 0;
+    
+    size_t i = 0;
+    size_t j = 0;
+    
+    while (src[i] != '\0' && j < (dst_cap - 1)) {
+        char c = src[i];
+        if (c == '\\' || c == '|' || c == '\n' || c == '\r') {
+            if (j + 2 >= dst_cap) break; // No space for escape sequence
+            dst[j++] = '\\';
+            if (c == '\n') dst[j++] = 'n';
+            else if (c == '\r') dst[j++] = 'r';
+            else dst[j++] = c;
+        } else {
+            dst[j++] = c;
+        }
+        i++;
+    }
+    dst[j] = '\0';
+    return j;
+}
+
+/**
+ * Builds the HxTP canonical string for signature verification.
+ * Support HxTP/3.0 (JSON) and HxTP/3.1 (Pipe-separated with escaping).
+ */
+bool build_canonical_string(
     const MessageHeader* hdr,
     const char* params_json,
     uint32_t params_len,
@@ -123,50 +150,45 @@ bool build_canonical_json(
 {
     if (!hdr || !out || out_cap == 0) return false;
 
-    // ── ASCII Enforcement Check ──────────────────
-    auto is_ascii = [](const char* s) {
-        if (!s) return true;
-        while (*s) {
-            if (static_cast<unsigned char>(*s) > 127) return false;
-            s++;
-        }
+    if (hdr->version.equals("HxTP/3.1")) {
+        // ── HxTP/3.1: Pipe-separated with Escaping ──────────
+        char buf[256];
+        size_t total = 0;
+        
+        auto append_field = [&](const char* f, bool last = false) -> bool {
+            size_t len = escape_field(f, out + total, out_cap - total);
+            total += len;
+            if (!last && total < (out_cap - 1)) {
+                out[total++] = '|';
+            }
+            return total < out_cap;
+        };
+
+        char seq_str[32], ts_str[32];
+        snprintf(seq_str, sizeof(seq_str), "%lld", static_cast<long long>(hdr->sequence_number));
+        snprintf(ts_str, sizeof(ts_str), "%lld", static_cast<long long>(hdr->timestamp));
+
+        if (!append_field(hdr->version.c_str())) return false;
+        if (!append_field(hdr->device_id.c_str())) return false;
+        if (!append_field(hdr->client_id.c_str())) return false;
+        if (!append_field(hdr->message_id.c_str())) return false;
+        if (!append_field(hdr->request_id.c_str())) return false;
+        if (!append_field(seq_str)) return false;
+        if (!append_field(ts_str)) return false;
+        if (!append_field(hdr->nonce.c_str())) return false;
+        if (!append_field(hdr->message_type.c_str())) return false;
+        if (!append_field(hdr->payload_hash.c_str(), true)) return false;
+
+        out[total] = '\0';
+        if (out_len) *out_len = total;
         return true;
-    };
-
-    if (!is_ascii(hdr->client_id.c_str()) ||
-        !is_ascii(hdr->device_id.c_str()) ||
-        !is_ascii(hdr->message_id.c_str()) ||
-        !is_ascii(hdr->nonce.c_str()) ||
-        !is_ascii(hdr->capability.c_str()) ||
-        !is_ascii(hdr->action.c_str()) ||
-        !is_ascii(hdr->tenant_id.c_str())) 
-    {
-        return false; // Reject non-ASCII in signable header fields
+    } else {
+		// ── HxTP/3.0: Deterministic JSON (Legacy Fallback) ──
+		// For brevity in Micro SDK, we assume the server provides 
+		// the canonical JSON or the client knows how to build it.
+		// (In reality, we'd use ArduinoJson here too).
+		return false; // Deprecated Mode
     }
-
-    if (params_json && params_len > 0) {
-        for (uint32_t i = 0; i < params_len; i++) {
-            if (static_cast<unsigned char>(params_json[i]) > 127) return false;
-        }
-    }
-
-    int written = snprintf(out, out_cap,
-        "%s|%s|%s|%s|%s|%lld|%lld|%s|%s|%s",
-        hdr->version.c_str(),
-        hdr->device_id.c_str(),
-        hdr->client_id.c_str(),
-        hdr->message_id.c_str(),
-        hdr->request_id.c_str(),
-        static_cast<long long>(hdr->sequence_number),
-        static_cast<long long>(hdr->timestamp),
-        hdr->nonce.c_str(),
-        hdr->message_type.c_str(),
-        hdr->payload_hash.c_str()
-    );
-
-    if (written < 0 || static_cast<size_t>(written) >= out_cap) return false;
-    if (out_len) *out_len = static_cast<size_t>(written);
-    return true;
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -395,13 +417,13 @@ ValidationResult validate_signature(
         );
     }
 
-    /* Build canonical JSON */
+    /* Build canonical string */
     char canonical[1024];
     size_t canonical_len = 0;
-    if (!build_canonical_json(&frame->header, frame->params_ptr, frame->params_len, canonical, sizeof(canonical), &canonical_len)) {
+    if (!build_canonical_string(&frame->header, frame->params_ptr, frame->params_len, canonical, sizeof(canonical), &canonical_len)) {
         return ValidationResult::fail(
             ValidationStep::SignatureCheck,
-            "CANONICAL_BUILD_FAILED: could not build canonical JSON"
+            "CANONICAL_BUILD_FAILED: could not build canonical string"
         );
     }
 

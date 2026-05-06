@@ -1,7 +1,7 @@
 {
     "name": "hxtp-micro",
-    "version": "1.0.6",
-    "description": "HXTP/3.0 protocol SDK for ESP32 and ESP8266 IoT devices. Production-grade HMAC-SHA256 signing, 7-step validation pipeline, binary framing, capability registry, and MQTT transport. Zero dynamic allocation in hot path.",
+    "version": "1.0.7",
+    "description": "HXTP/3.1 protocol SDK for ESP32 and ESP8266 IoT devices. Production-grade HMAC-SHA256 signing, 7-step validation pipeline, binary framing, capability registry, and MQTT transport. Zero dynamic allocation in hot path.",
     "keywords": [
         "hxtp",
         "iot",
