@@ -56,19 +56,21 @@ namespace hxtp {
 
 enum class ClientState : uint8_t {
     IDLE            = 0,    /* Not started */
-    PROVISIONING    = 1,    /* AP + WebServer setup */
+    PROVISIONING    = 1,    /* SoftAP + Local WebServer */
     WIFI_CONNECTING = 2,    /* Connecting to WiFi */
-    WIFI_CONNECTED  = 3,    /* WiFi up, not yet MQTT */
+    WIFI_CONNECTED  = 3,    /* WiFi up */
     TIME_SYNCING    = 4,    /* Waiting for NTP */
-    BOOTSTRAPPING   = 5,    /* Fetching config via HTTP */
-    MQTT_LINKING    = 6,    /* Connecting to MQTT broker */
-    MQTT_LINKED     = 7,    /* MQTT up, subscribing */
-    SUBSCRIBING     = 8,    /* Subscribing to topics */
-    HELLO_SENT      = 9,    /* HELLO handshake sent */
-    READY           = 10,   /* Fully operational */
-    RECONNECTING    = 11,   /* Lost connection, retrying */
-    PENDING_CLAIM   = 12,   /* Bootstrapped but not yet claimed */
-    ERROR_STATE     = 13,   /* Fatal error */
+    BOOTSTRAPPING   = 5,    /* Fetching session tokens via HTTP */
+    PENDING_CLAIM   = 6,    /* Identity registered, awaiting claim */
+    CLAIMED         = 7,    /* Ownership bound, awaiting runtime auth */
+    MQTT_LINKING    = 8,    /* Connecting to MQTT broker with session token */
+    MQTT_LINKED     = 9,    /* MQTT connected */
+    SUBSCRIBING     = 10,   /* Subscribing to topics */
+    HELLO_SENT      = 11,   /* HELLO handshake sent */
+    ACTIVE          = 12,   /* Fully operational (formerly READY) */
+    RECONNECTING    = 13,   /* Lost connection, retrying */
+    REVOKED         = 14,   /* Permanently blocked */
+    ERROR_STATE     = 15,   /* Fatal error */
 };
 
 /* ── Callback Types ─────────────────────────────────────────────────── */
@@ -135,7 +137,7 @@ public:
     /* ── State & Status ──────────────────────────────── */
 
     ClientState state() const { return state_; }
-    bool isConnected() const { return state_ == ClientState::READY; }
+    bool isConnected() const { return state_ == ClientState::ACTIVE; }
     bool isWiFiConnected() const;
     bool isMqttConnected();
     const char* stateStr() const;
@@ -164,6 +166,7 @@ private:
     void tick_ready();
     void tick_reconnecting();
     void tick_pending_claim();
+    void tick_claimed();
 
     /* ── MQTT Message Handler ──────────────────────────── */
     static void mqtt_callback_static(char* topic, uint8_t* payload, unsigned int length);
@@ -184,6 +187,8 @@ private:
     /* ── Fetched Bootstrapped Config ─────────────────── */
     char        mqtt_host_[64];
     uint16_t    mqtt_port_;
+    char        mqtt_session_token_[256];
+    int64_t     session_expiry_ms_;
     
     /* ── Core Engine ─────────────────────────────────── */
     Core    core_;
@@ -221,6 +226,7 @@ private:
     /* ── Callbacks ───────────────────────────────────── */
     StateCallback  state_change_cb_;
     void*                    state_change_ctx_;
+    FixedStr<UuidLen>    hello_msg_id_;
     ErrorCallback        error_cb_;
     void*                    error_ctx_;
 

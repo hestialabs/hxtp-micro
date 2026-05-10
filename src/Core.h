@@ -97,10 +97,6 @@ bool json_get_raw(
     const char** out_ptr, size_t* out_len
 );
 
-/**
- * Strip all whitespace from a JSON string to help with canonical hashing.
- */
-void json_canonicalize(const char* in, char* out);
 
 /* ── Core Engine ────────────────────────────────────────────────────── */
 
@@ -166,7 +162,8 @@ public:
      * Build a HELLO handshake frame.
      */
     Error build_hello(
-        uint8_t* out, size_t out_cap, size_t* out_len
+        uint8_t* out, size_t out_cap, size_t* out_len,
+        char* msg_id_out = nullptr
     );
 
     /**
@@ -214,6 +211,10 @@ public:
     bool                is_secret_loaded() const { return secret_loaded_; }
     const char*         device_id() const { return device_id_; }
     const char*         tenant_id() const { return tenant_id_; }
+    const char*         client_id() const { return client_id_; }
+    const char*         ed25519_pub_hex() const { return ed25519_pub_hex_; }
+    Error               ed25519_sign(const uint8_t* msg, size_t len, uint8_t sig[Ed25519SigLen]);
+    bool                generate_claim_token(char* out, size_t out_cap);
     void                set_identity(const char* device_id, const char* secret_hex);
     const uint8_t*      device_secret() const { return device_secret_; }
     const StorageAdapter* storage() const { return storage_; }
@@ -229,9 +230,11 @@ private:
     Error build_signed_json(
         const char* message_type,
         const char* body_json, uint32_t body_len,
-        char* json_out, size_t json_cap, size_t* json_len
+        char* json_out, size_t json_cap, size_t* json_len,
+        char* msg_id_out = nullptr
     );
 
+    bool                    ensure_identity();
     bool                    initialized_;
     const Config*           config_;
     const StorageAdapter*   storage_;
@@ -242,7 +245,13 @@ private:
     char    tenant_id_[UuidLen + 1];
     char    client_id_[UuidLen + 1];
 
-    /* Secret material */
+    /* Root Identity (Ed25519) */
+    uint8_t ed25519_pub_[Ed25519PubKeyLen];
+    uint8_t ed25519_priv_[Ed25519PrivKeyLen];
+    char    ed25519_pub_hex_[Ed25519PubKeyLen * 2 + 1];
+    bool    identity_generated_;
+
+    /* Secret material (HMAC runtime secret) */
     uint8_t device_secret_[SecretLen];
     bool    secret_loaded_;
 

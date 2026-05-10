@@ -171,6 +171,37 @@ Error generate_nonce(char* out, size_t* out_len, bool (*rng)(uint8_t*, size_t));
  */
 Error generate_uuid_v4(char out[37], bool (*rng)(uint8_t*, size_t));
 
+/* ── Ed25519 Identity ───────────────────────────────────────────────── */
+
+/**
+ * Generate an Ed25519 keypair.
+ * @param pub   Output public key (32 bytes)
+ * @param priv  Output private key seed (32 bytes)
+ * @param rng   Platform RNG function
+ * @return      Error::OK or RNG_FAILED
+ */
+Error ed25519_keygen(
+    uint8_t pub[Ed25519PubKeyLen],
+    uint8_t priv[Ed25519PrivKeyLen],
+    bool (*rng)(uint8_t*, size_t)
+);
+
+/**
+ * Sign a message using Ed25519.
+ * @param msg       Message data
+ * @param len       Message length
+ * @param priv      Private key seed (32 bytes)
+ * @param pub       Public key (32 bytes)
+ * @param sig       Output signature (64 bytes)
+ * @return          Error::OK or SIGN_FAILED
+ */
+Error ed25519_sign(
+    const uint8_t* msg, size_t len,
+    const uint8_t priv[Ed25519PrivKeyLen],
+    const uint8_t pub[Ed25519PubKeyLen],
+    uint8_t sig[Ed25519SigLen]
+);
+
 } /* namespace crypto */
 } /* namespace hxtp */
 

@@ -135,14 +135,31 @@ static bool nvs_read_param(const char* key, char* out, size_t max_len) {
     return (err == ESP_OK);
 }
 
-/* ── Write Parameter ────────────────────────────────────────────────── */
-
 static bool nvs_write_param(const char* key, const char* val) {
     if (!s_nvs_open || !key || !val) return false;
 
     esp_err_t err = nvs_set_str(s_nvs_handle, key, val);
     if (err != ESP_OK) return false;
 
+    return nvs_commit(s_nvs_handle) == ESP_OK;
+}
+
+/* ── Identity ───────────────────────────────────────────────────────── */
+
+static bool nvs_read_identity(uint8_t* pub, uint8_t* priv) {
+    if (!s_nvs_open || !pub || !priv) return false;
+    size_t pub_len = Ed25519PubKeyLen;
+    size_t priv_len = Ed25519PrivKeyLen;
+    esp_err_t err_pub = nvs_get_blob(s_nvs_handle, "id_pub", pub, &pub_len);
+    esp_err_t err_priv = nvs_get_blob(s_nvs_handle, "id_priv", priv, &priv_len);
+    return (err_pub == ESP_OK && err_priv == ESP_OK);
+}
+
+static bool nvs_write_identity(const uint8_t* pub, const uint8_t* priv) {
+    if (!s_nvs_open || !pub || !priv) return false;
+    esp_err_t err_pub = nvs_set_blob(s_nvs_handle, "id_pub", pub, Ed25519PubKeyLen);
+    esp_err_t err_priv = nvs_set_blob(s_nvs_handle, "id_priv", priv, Ed25519PrivKeyLen);
+    if (err_pub != ESP_OK || err_priv != ESP_OK) return false;
     return nvs_commit(s_nvs_handle) == ESP_OK;
 }
 
@@ -178,6 +195,8 @@ inline StorageAdapter create_nvs_adapter() {
     adapter.write_sequence  = nvs_write_sequence;
     adapter.read_device_id  = nvs_read_device_id;
     adapter.write_device_id = nvs_write_device_id;
+    adapter.read_identity   = nvs_read_identity;
+    adapter.write_identity  = nvs_write_identity;
     adapter.read_param      = nvs_read_param;
     adapter.write_param     = nvs_write_param;
     adapter.read_ca_cert    = nvs_read_ca_cert;

@@ -27,6 +27,7 @@
 #if HXTP_FEATURE_AES_GCM
 #include <bearssl/bearssl_block.h>
 #include <bearssl/bearssl_aead.h>
+#include <bearssl/bearssl_ec.h>
 #endif
 
 namespace hxtp {
@@ -284,6 +285,38 @@ Error generate_uuid_v4(char out[37], bool (*rng)(uint8_t*, size_t)) {
     }
     out[oi] = '\0';
     return Error::OK;
+}
+
+/* ── Ed25519 ────────────────────────────────────────────────────────── */
+
+Error ed25519_keygen(
+    uint8_t pub[Ed25519PubKeyLen],
+    uint8_t priv[Ed25519PrivKeyLen],
+    bool (*rng)(uint8_t*, size_t)
+) {
+    if (!rng(priv, Ed25519PrivKeyLen)) return Error::RNG_FAILED;
+
+    /*
+     * BearSSL's EdDSA implementation usually requires the m15 or i31 engines.
+     * keygen derives the public key from the private seed.
+     */
+    br_eddsa_m15_generate_pubkey(&br_ed25519_m15_sign, pub, priv);
+    return Error::OK;
+}
+
+Error ed25519_sign(
+    const uint8_t* msg, size_t len,
+    const uint8_t priv[Ed25519PrivKeyLen],
+    const uint8_t pub[Ed25519PubKeyLen],
+    uint8_t sig[Ed25519SigLen]
+) {
+    /*
+     * BearSSL EdDSA signing:
+     * br_eddsa_m15_sign(engine, priv_seed, pub, hash_id, msg, msg_len, sig)
+     * For Ed25519, hash_id is usually not used (it's internal to the spec).
+     */
+    size_t slen = br_ed25519_m15_sign.sign(priv, pub, msg, len, sig);
+    return (slen == Ed25519SigLen) ? Error::OK : Error::SIGN_FAILED;
 }
 
 } /* namespace crypto */

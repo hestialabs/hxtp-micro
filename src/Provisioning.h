@@ -29,7 +29,7 @@ namespace hxtp {
 
 class Provisioning {
 public:
-    explicit Provisioning(StorageAdapter* storage);
+    explicit Provisioning(Core* core, StorageAdapter* storage);
 
     /**
      * Start the provisioning SoftAP and WebServer.
@@ -59,6 +59,7 @@ private:
     void handleInfo();
     void handleNotFound();
 
+    Core*           core_;
     StorageAdapter* storage_;
 #ifdef ESP32
     WebServer server_;

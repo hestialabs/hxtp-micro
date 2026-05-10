@@ -17,7 +17,7 @@
 
 #include "Validation.h"
 #include "Crypto.h"
-#include "Core.h"     /* for json_canonicalize */
+#include "Core.h"
 #include <cstdio>     /* snprintf */
 #include <cstring>    /* strcmp, memset */
 
@@ -36,7 +36,7 @@ void NonceCache::init() {
 bool NonceCache::check_and_insert(const char* nonce, int64_t now_ms) {
     if (!nonce || nonce[0] == '\0') return true;  /* empty nonce = treat as dup (reject) */
 
-    const int64_t ttl_ms = static_cast<int64_t>(NonceTtlSec) * 1000;
+    const int64_t ttl_ms = static_cast<int64_t>(NonceTtlMs);
 
     /* ── Pass 1: Check for duplicate & evict expired ──── */
     for (size_t i = 0; i < count; ++i) {
@@ -138,22 +138,8 @@ static size_t escape_field(const char* src, char* dst, size_t dst_cap) {
 
 /**
  * Builds the HxTP canonical string for signature verification.
- * Support HxTP/3.0 (JSON) and HxTP/3.1 (Pipe-separated with escaping).
+ * Strictly follows the frozen HxTP/3.1 pipe-separated format.
  */
-bool build_canonical_params(
-    const char* params_json,
-    uint32_t params_len,
-    char* out,
-    size_t out_cap,
-    size_t* out_len
-) {
-    if (!params_json || !out || out_cap == 0) return false;
-    
-    /* ── Simple Canonicalization: Strip Whitespace ── */
-    json_canonicalize(params_json, out);
-    if (out_len) *out_len = strlen(out);
-    return true;
-}
 
 bool build_canonical_string(
     const MessageHeader* hdr,
@@ -165,7 +151,7 @@ bool build_canonical_string(
 {
     if (!hdr || !out || out_cap == 0) return false;
 
-    // ── HxTP/3.1: Pipe-separated with Escaping ──────────
+    // ── HxTP/3.1: Frozen Pipe-separated Format ──────────
     size_t total = 0;
     
     auto append_field = [&](const char* f, bool last = false) -> bool {
@@ -243,7 +229,7 @@ ValidationResult validate_timestamp(const InboundFrame* frame, int64_t now_ms) {
             "TIMESTAMP_EXPIRED: message too old"
         );
     }
-    if (age_sec < -static_cast<int64_t>(TimestampSkewSec)) {
+    if (age_sec < -static_cast<int64_t>(TimestampSkewMs / 1000)) {
         return ValidationResult::fail(
             ValidationStep::TimestampCheck,
             "TIMESTAMP_FUTURE: clock skew exceeds limit"
@@ -292,17 +278,8 @@ ValidationResult validate_nonce(
 
 /* ── Step 5: Payload Hash ────────────────────────────────────────── */
 
-bool build_canonical_params(
-    const char* params_json,
-    uint32_t params_len,
-    char* out,
-    size_t out_cap,
-    size_t* out_len)
-
-
 ValidationResult validate_payload_hash(const InboundFrame* frame) {
-    /* If no payload_hash provided, skip (matches server behavior —
-     * server checks "if (Msg.payload_hash)") */
+    /* If no payload_hash provided, skip */
     if (frame->header.payload_hash.empty()) {
         return ValidationResult::ok();
     }
@@ -310,24 +287,16 @@ ValidationResult validate_payload_hash(const InboundFrame* frame) {
     const char* params = frame->params_ptr;
     uint32_t    plen   = frame->params_len;
 
-    /* Fallback: if params not parsed yet, use empty object */
+    /* Fallback: if params not found, use empty object */
     const char empty_obj[] = "{}";
     if (!params || plen == 0) {
         params = empty_obj;
         plen   = 2;
     }
 
-    char canonical_params[1024];
-    size_t cp_len = 0;
-    if (!build_canonical_params(params, plen, canonical_params, sizeof(canonical_params), &cp_len)) {
-        return ValidationResult::fail(
-            ValidationStep::PayloadHashCheck,
-            "CANONICAL_BUILD_FAILED: could not build canonical params"
-        );
-    }
-
     char computed_hex[Sha256HexLen + 1];
-    Error err = crypto::sha256_hex(canonical_params, cp_len, computed_hex);
+    /* NO CANONICALIZATION: Hash raw payload bytes as transmitted */
+    Error err = crypto::sha256_hex(params, plen, computed_hex);
     if (err != Error::OK) {
         return ValidationResult::fail(
             ValidationStep::PayloadHashCheck,
@@ -335,7 +304,7 @@ ValidationResult validate_payload_hash(const InboundFrame* frame) {
         );
     }
 
-    /* Compare hashes — NOT constant-time (payload hash is not a secret) */
+    /* Compare hashes */
     if (strcmp(computed_hex, frame->header.payload_hash.c_str()) != 0) {
         return ValidationResult::fail(
             ValidationStep::PayloadHashCheck,

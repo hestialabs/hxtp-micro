@@ -18,7 +18,11 @@ Bootstrap::Bootstrap(Core* core, WiFiClientSecure* tls_client)
 }
 
 BootstrapConfig Bootstrap::perform(const char* api_url) {
-    BootstrapConfig config = {"", 8883, 30, false};
+    BootstrapConfig config;
+    memset(&config, 0, sizeof(config));
+    config.mqtt_port = 8883;
+    config.heartbeat_interval_seconds = 30;
+    config.success = false;
 
     if (!core_ || !core_->is_initialized() || !core_->is_secret_loaded()) {
         return config;
@@ -40,14 +44,19 @@ BootstrapConfig Bootstrap::perform(const char* api_url) {
     
     int64_t timestamp = core_->platform()->get_epoch_ms();
     
-    /* Canonical: version|type|device|tenant|timestamp|message_id|nonce */
-    char canonical[256];
-    snprintf(canonical, sizeof(canonical), "%s|bootstrap|%s|%s|%lld|%s|%s",
+    /* 
+     * Canonical HxTP/3.1 Format:
+     * version|device_id|tenant_id|client_id|message_id|request_id|sequence|timestamp|nonce|message_type|payload_hash
+     */
+    char canonical[512];
+    snprintf(canonical, sizeof(canonical), "%s|%s|%s|%s|%s|%s|-1|%lld|%s|bootstrap|e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
              VersionString,
              core_->device_id(),
              core_->tenant_id(),
-             (long long)timestamp,
+             core_->client_id(),
              msg_id,
+             msg_id,
+             (long long)timestamp,
              nonce);
 
     char signature[HmacHexLen + 1];
@@ -104,10 +113,13 @@ BootstrapConfig Bootstrap::perform(const char* api_url) {
 
         config.activation_state = DeviceActivationState::BOOTSTRAP;
 
-        /* Activation State */
+        /* Activation State Mapping */
         if (json_get_string(json, jlen, "activation_state", state_str, sizeof(state_str), nullptr)) {
             if (strcmp(state_str, "active") == 0) {
                 config.activation_state = DeviceActivationState::ACTIVE;
+                config.success = true;
+            } else if (strcmp(state_str, "claimed") == 0) {
+                config.activation_state = DeviceActivationState::CLAIMED;
                 config.success = true;
             } else if (strcmp(state_str, "pending_claim") == 0) {
                 config.activation_state = DeviceActivationState::PENDING_CLAIM;
@@ -136,6 +148,14 @@ BootstrapConfig Bootstrap::perform(const char* api_url) {
                 config.mqtt_port = (uint16_t)atoi(port_ptr + 1);
             } else {
                 strncpy(config.mqtt_host, host_start, sizeof(config.mqtt_host) - 1);
+            }
+        }
+
+        /* 3. MQTT Session Token */
+        if (json_get_string(json, jlen, "mqtt_session_token", config.mqtt_session_token, sizeof(config.mqtt_session_token), nullptr)) {
+            char exp_buf[32];
+            if (json_get_string(json, jlen, "session_expiry", exp_buf, sizeof(exp_buf), nullptr)) {
+                config.session_expiry_ms = (int64_t)atoll(exp_buf);
             }
         }
 

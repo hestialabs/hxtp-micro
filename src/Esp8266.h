@@ -8,7 +8,9 @@
  *   [1..32]    device secret (32 bytes)
  *   [33..64]   device ID (32 chars, null-terminated)
  *   [65..72]   outbound sequence (int64, little-endian)
- *   [73..128]  reserved
+ *   [73..104]  Ed25519 public key (32 bytes)
+ *   [105..136] Ed25519 private key seed (32 bytes)
+ *   [137..256] reserved
  *
  * Copyright (c) 2026 Hestia Labs
  * SDK-License-Identifier: MIT
@@ -29,12 +31,14 @@
 namespace hxtp {
 namespace platform {
 
-static constexpr size_t   EEPROM_SIZE          = 128;
+static constexpr size_t   EEPROM_SIZE          = 256;
 static constexpr size_t   EEPROM_MAGIC_OFFSET  = 0;
 static constexpr uint8_t  EEPROM_MAGIC_VALUE   = 0xA5;
 static constexpr size_t   EEPROM_SECRET_OFFSET = 1;
 static constexpr size_t   EEPROM_DEVID_OFFSET  = 33;
 static constexpr size_t   EEPROM_SEQ_OFFSET    = 65;
+static constexpr size_t   EEPROM_IDPUB_OFFSET  = 73;
+static constexpr size_t   EEPROM_IDPRIV_OFFSET = 105;
 
 static bool s_eeprom_initialized = false;
 
@@ -137,6 +141,30 @@ static bool eeprom_read_device_id(char* out, size_t max_len) {
     return !all_zero;
 }
 
+/* ── Identity ───────────────────────────────────────────────────────── */
+
+static bool eeprom_read_identity(uint8_t* pub, uint8_t* priv) {
+    if (!s_eeprom_initialized) return false;
+    for (size_t i = 0; i < Ed25519PubKeyLen; ++i) {
+        pub[i] = EEPROM.read(EEPROM_IDPUB_OFFSET + i);
+    }
+    for (size_t i = 0; i < Ed25519PrivKeyLen; ++i) {
+        priv[i] = EEPROM.read(EEPROM_IDPRIV_OFFSET + i);
+    }
+    return true;
+}
+
+static bool eeprom_write_identity(const uint8_t* pub, const uint8_t* priv) {
+    if (!s_eeprom_initialized) return false;
+    for (size_t i = 0; i < Ed25519PubKeyLen; ++i) {
+        EEPROM.write(EEPROM_IDPUB_OFFSET + i, pub[i]);
+    }
+    for (size_t i = 0; i < Ed25519PrivKeyLen; ++i) {
+        EEPROM.write(EEPROM_IDPRIV_OFFSET + i, priv[i]);
+    }
+    return EEPROM.commit();
+}
+
 /* ── Write Device ID ────────────────────────────────────────────────── */
 
 static bool eeprom_write_device_id(const char* id) {
@@ -193,6 +221,8 @@ inline StorageAdapter create_eeprom_adapter() {
     adapter.write_sequence  = eeprom_write_sequence;
     adapter.read_device_id  = eeprom_read_device_id;
     adapter.write_device_id = eeprom_write_device_id;
+    adapter.read_identity   = eeprom_read_identity;
+    adapter.write_identity  = eeprom_write_identity;
     adapter.read_param      = nullptr; /* Not supported on basic EEPROM */
     adapter.write_param     = nullptr;
     adapter.read_ca_cert    = nullptr;

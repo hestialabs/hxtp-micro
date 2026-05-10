@@ -56,13 +56,18 @@ static constexpr size_t   NonceB64Min        = 22;
 static constexpr size_t   AesGcmIvLen       = 12;
 static constexpr size_t   AesGcmTagLen      = 16;
 static constexpr size_t   AesKeyLen           = 32;
+static constexpr size_t   Ed25519PubKeyLen    = 32;
+static constexpr size_t   Ed25519PrivKeyLen   = 32; /* Seed */
+static constexpr size_t   Ed25519SigLen       = 64;
 
-/* ── Nonce Ring Buffer Size ─────────────────────────────────────────── */
+/* ── Replay Policy & Timing (HARDENED) ───────────────────────────────── */
 
+static constexpr uint32_t TimestampSkewMs    = 30000; /* 30 seconds */
+static constexpr uint32_t NonceTtlMs         = 60000; /* 1 minute */
 #ifdef NonceCacheSizeOverride
 static constexpr size_t   NonceCacheSize     = NonceCacheSizeOverride;
 #else
-static constexpr size_t   NonceCacheSize     = 64;
+static constexpr size_t   NonceCacheSize     = 128;
 #endif
 
 /* ── Capability Limits ──────────────────────────────────────────────── */
@@ -144,8 +149,9 @@ enum class DeviceStatus : uint8_t {
 enum class DeviceActivationState : uint8_t {
     BOOTSTRAP     = 0,
     PENDING_CLAIM = 1,
-    ACTIVE        = 2,
-    REVOKED       = 3,
+    CLAIMED       = 2,
+    ACTIVE        = 3,
+    REVOKED       = 4,
 };
 
 /* ── Fixed-length char buffer (no heap) ─────────────────────────────── */
@@ -325,6 +331,8 @@ struct StorageAdapter {
     bool (*write_sequence)(const char* key, int64_t value);
     bool (*read_device_id)(char* out, size_t max_len);
     bool (*write_device_id)(const char* id);
+    bool (*read_identity)(uint8_t* pub, uint8_t* priv);
+    bool (*write_identity)(const uint8_t* pub, const uint8_t* priv);
     bool (*read_param)(const char* key, char* out, size_t max_len);
     bool (*write_param)(const char* key, const char* val);
     bool (*read_ca_cert)(char* out, size_t max_len);

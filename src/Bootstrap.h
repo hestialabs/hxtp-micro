@@ -31,6 +31,8 @@ namespace hxtp {
 struct BootstrapConfig {
     char mqtt_host[64];
     uint16_t mqtt_port;
+    char mqtt_session_token[256];
+    int64_t session_expiry_ms;
     uint32_t heartbeat_interval_seconds;
     DeviceActivationState activation_state;
     bool success;

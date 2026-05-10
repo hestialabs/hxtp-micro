@@ -126,7 +126,7 @@ ValidationResult validate_signature(
 /* ── Canonical String Builder ───────────────────────────────────────── */
 
 /**
- * Build the canonical string for signature computation (HxTP/3.1).
+ * Build the canonical string for signature computation (HxTP/1.1).
  * Format: version|device_id|tenant_id|client_id|message_id|request_id|sequence_number|timestamp|nonce|message_type|payload_hash
  *
  * @param hdr         Parsed message header
@@ -137,14 +137,6 @@ ValidationResult validate_signature(
  * @param out_len     Receives actual length
  * @return            true on success, false if buffer too small
  */
-bool build_canonical_params(
-    const char* params_json,
-    uint32_t params_len,
-    char* out,
-    size_t out_cap,
-    size_t* out_len
-);
-
 bool build_canonical_string(
     const MessageHeader* hdr,
     const char* params_json,

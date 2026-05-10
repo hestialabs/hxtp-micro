@@ -12,8 +12,9 @@
 
 namespace hxtp {
 
-Provisioning::Provisioning(StorageAdapter* storage)
-    : storage_(storage)
+Provisioning::Provisioning(Core* core, StorageAdapter* storage)
+    : core_(core)
+    , storage_(storage)
     , server_(80)
     , complete_(false)
 {
@@ -100,20 +101,23 @@ void Provisioning::handleWifiSetup() {
 
 void Provisioning::handleInfo() {
     String mac = WiFi.softAPmacAddress();
-    char json[256];
+    char token[512];
+    bool has_token = core_->generate_claim_token(token, sizeof(token));
+
+    char json[1024];
     snprintf(json, sizeof(json),
         "{"
         "\"device_serial\":\"%s\","
         "\"device_model\":\"%s\","
         "\"firmware_version\":\"%s\","
-        "\"claim_code\":\"%s\","
-        "\"public_key\":\"%s\""
+        "\"public_key\":\"%s\","
+        "\"claim_token\":\"%s\""
         "}",
         mac.c_str(),
-        "esp32-hxtp", // Example model
-        "1.0.3",      // Example version
-        "CLAIM-XXXX", // Placeholder claim code
-        "PUBKEY-PLACEHOLDER" // Placeholder until ECC added
+        "esp32-hxtp",
+        "1.0.3",
+        core_->ed25519_pub_hex(),
+        has_token ? token : ""
     );
     server_.send(200, "application/json", json);
 }

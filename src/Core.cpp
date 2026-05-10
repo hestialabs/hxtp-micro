@@ -263,24 +263,6 @@ bool json_get_bool(
     return false;
 }
 
-/**
- * Strips all whitespace from a JSON string to help with canonical hashing.
- * WARNING: Does NOT sort keys. User must ensure keys are sorted.
- */
-void json_canonicalize(const char* in, char* out) {
-    if (!in || !out) return;
-    bool in_quotes = false;
-    const char* p = in;
-    while (*p) {
-        if (*p == '"' && (p == in || *(p - 1) != '\\')) in_quotes = !in_quotes;
-        if (in_quotes || (*p != ' ' && *p != '\t' && *p != '\n' && *p != '\r')) {
-            *out++ = *p;
-        }
-        p++;
-    }
-    *out = '\0';
-}
-
 bool json_get_uint16(
     const char* json, size_t json_len,
     const char* key,
@@ -325,6 +307,10 @@ Core::Core()
     memset(device_id_, 0, sizeof(device_id_));
     memset(tenant_id_, 0, sizeof(tenant_id_));
     memset(client_id_, 0, sizeof(client_id_));
+    memset(ed25519_pub_, 0, sizeof(ed25519_pub_));
+    memset(ed25519_priv_, 0, sizeof(ed25519_priv_));
+    memset(ed25519_pub_hex_, 0, sizeof(ed25519_pub_hex_));
+    identity_generated_ = false;
     memset(device_secret_, 0, sizeof(device_secret_));
 }
 
@@ -347,6 +333,11 @@ Error Core::init(
         }
     }
 
+    /* ── Identity ──────────────────────────────────── */
+    if (!ensure_identity()) {
+        return Error::CRYPTO_INIT_FAILED;
+    }
+
     /* ── Device ID ─────────────────────────────────── */
     if (config_->device_id) {
         size_t dlen = strlen(config_->device_id);
@@ -354,10 +345,13 @@ Error Core::init(
         memcpy(device_id_, config_->device_id, dlen);
         device_id_[dlen] = '\0';
     } else if (storage_ && storage_->read_device_id) {
-        if (!storage_->read_device_id(device_id_, sizeof(device_id_))) {
-            /* Will be generated during HELLO */
-            device_id_[0] = '\0';
-        }
+        storage_->read_device_id(device_id_, sizeof(device_id_));
+    }
+ 
+    /* If still no device ID, derive from Ed25519 pub */
+    if (device_id_[0] == '\0') {
+        memcpy(device_id_, ed25519_pub_hex_, DeviceIdLen);
+        device_id_[DeviceIdLen] = '\0';
     }
 
     /* ── Tenant ID ─────────────────────────────────── */
@@ -667,7 +661,8 @@ void Core::set_identity(const char* device_id, const char* secret_hex) {
 Error Core::build_signed_json(
     const char* message_type,
     const char* body_json, uint32_t body_len,
-    char* json_out, size_t json_cap, size_t* json_len)
+    char* json_out, size_t json_cap, size_t* json_len,
+    char* msg_id_out)
 {
     if (!initialized_) return Error::NOT_INITIALIZED;
 
@@ -675,6 +670,10 @@ Error Core::build_signed_json(
     char msg_id[37];
     Error err = crypto::generate_uuid_v4(msg_id, platform_->random_bytes);
     if (err != Error::OK) return err;
+
+    if (msg_id_out) {
+        memcpy(msg_id_out, msg_id, 37);
+    }
 
     char nonce[MaxNonceLen + 1];
     size_t nonce_len = 0;
@@ -691,13 +690,8 @@ Error Core::build_signed_json(
     uint32_t hash_input_len = (body_json && body_len > 0) ? body_len : 2;
 
     {
-        /* Canonicalize params for hashing (matches CanonicalParamsJson in other SDKs) */
-        char canonical_params[1024];
-        size_t cp_len = 0;
-        if (!build_canonical_params(hash_input, hash_input_len, canonical_params, sizeof(canonical_params), &cp_len)) {
-            return Error::BUFFER_OVERFLOW;
-        }
-        err = crypto::sha256_hex(canonical_params, cp_len, payload_hash);
+        /* NO CANONICALIZATION: Hash raw payload bytes */
+        err = crypto::sha256_hex(hash_input, hash_input_len, payload_hash);
         if (err != Error::OK) return err;
     }
 
@@ -813,7 +807,8 @@ Error Core::build_heartbeat(
 }
 
 Error Core::build_hello(
-    uint8_t* out, size_t out_cap, size_t* out_len)
+    uint8_t* out, size_t out_cap, size_t* out_len,
+    char* msg_id_out)
 {
     /* HELLO payload includes firmware version and device type */
     char body[256];
@@ -830,7 +825,8 @@ Error Core::build_hello(
     Error err = build_signed_json(
         MessageTypeStr::HELLO,
         body, static_cast<uint32_t>(blen),
-        json_buf, sizeof(json_buf), &json_len
+        json_buf, sizeof(json_buf), &json_len,
+        msg_id_out
     );
     if (err != Error::OK) return err;
 
@@ -931,6 +927,56 @@ bool Core::build_topic(
     );
 
     return (written > 0 && static_cast<size_t>(written) < out_cap);
+}
+
+bool Core::ensure_identity() {
+    bool loaded = false;
+    if (storage_ && storage_->read_identity) {
+        loaded = storage_->read_identity(ed25519_pub_, ed25519_priv_);
+    }
+
+    if (!loaded) {
+        Error err = crypto::ed25519_keygen(ed25519_pub_, ed25519_priv_, platform_->random_bytes);
+        if (err != Error::OK) return false;
+
+        if (storage_ && storage_->write_identity) {
+            storage_->write_identity(ed25519_pub_, ed25519_priv_);
+        }
+        identity_generated_ = true;
+    }
+
+    crypto::hex_encode(ed25519_pub_, Ed25519PubKeyLen, ed25519_pub_hex_);
+    return true;
+}
+
+Error Core::ed25519_sign(const uint8_t* msg, size_t len, uint8_t sig[Ed25519SigLen]) {
+    return crypto::ed25519_sign(msg, len, ed25519_priv_, ed25519_pub_, sig);
+}
+
+bool Core::generate_claim_token(char* out, size_t out_cap) {
+    char nonce[MaxNonceLen + 1];
+    size_t nlen;
+    if (crypto::generate_nonce(nonce, &nlen, platform_->random_bytes) != Error::OK) return false;
+
+    int64_t ts = platform_->get_epoch_ms();
+    int64_t expiry = ts + 300000; // 5 minutes
+
+    /* Canonical: device_id|pub_hex|nonce|timestamp|expiry */
+    char canonical[256];
+    int clen = snprintf(canonical, sizeof(canonical), "%s|%s|%s|%lld|%lld",
+        device_id_, ed25519_pub_hex_, nonce, (long long)ts, (long long)expiry);
+
+    if (clen < 0 || (size_t)clen >= sizeof(canonical)) return false;
+
+    uint8_t sig[Ed25519SigLen];
+    if (ed25519_sign((uint8_t*)canonical, clen, sig) != Error::OK) return false;
+
+    char sig_hex[Ed25519SigLen * 2 + 1];
+    crypto::hex_encode(sig, Ed25519SigLen, sig_hex);
+
+    /* Token format: canonical.signature */
+    int tlen = snprintf(out, out_cap, "%s.%s", canonical, sig_hex);
+    return (tlen > 0 && (size_t)tlen < out_cap);
 }
 
 } /* namespace hxtp */

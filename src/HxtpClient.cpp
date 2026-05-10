@@ -25,7 +25,7 @@ Client::Client(const Config& config)
     , core_()
     , storage_adapter_({})
     , platform_crypto_({})
-    , provisioning_(&storage_adapter_)
+    , provisioning_(&core_, &storage_adapter_)
     , bootstrap_(&core_, &tls_client_)
     , mqtt_client_(tls_client_)
 #ifdef ESP8266
@@ -225,7 +225,7 @@ void Client::loop() {
             tick_hello();
             break;
 
-        case ClientState::READY:
+        case ClientState::ACTIVE:
             tick_ready();
             break;
 
@@ -235,6 +235,10 @@ void Client::loop() {
 
         case ClientState::PENDING_CLAIM:
             tick_pending_claim();
+            break;
+
+        case ClientState::CLAIMED:
+            tick_claimed();
             break;
 
         case ClientState::ERROR_STATE:
@@ -307,15 +311,21 @@ void Client::tick_bootstrapping() {
     if (bcfg.success) {
         snprintf(mqtt_host_, sizeof(mqtt_host_), "%s", bcfg.mqtt_host);
         mqtt_port_ = bcfg.mqtt_port;
+        strncpy(mqtt_session_token_, bcfg.mqtt_session_token, sizeof(mqtt_session_token_) - 1);
+        session_expiry_ms_ = bcfg.session_expiry_ms;
         
         /* Update config for later use */
         const_cast<Config*>(&config_)->heartbeat_interval_seconds = bcfg.heartbeat_interval_seconds;
 
         mqtt_client_.setServer(mqtt_host_, mqtt_port_);
         
-        if (bcfg.activation_state == DeviceActivationState::ACTIVE) {
+        if (bcfg.activation_state == DeviceActivationState::ACTIVE || 
+            bcfg.activation_state == DeviceActivationState::CLAIMED) 
+        {
             set_state(ClientState::MQTT_LINKING);
-            Serial.print("[HXTP] Bootstrap success (ACTIVE). Broker: ");
+            Serial.print("[HXTP] Bootstrap success (");
+            Serial.print(bcfg.activation_state == DeviceActivationState::ACTIVE ? "ACTIVE" : "CLAIMED");
+            Serial.print("). Broker: ");
             Serial.println(mqtt_host_);
         } else if (bcfg.activation_state == DeviceActivationState::PENDING_CLAIM) {
             set_state(ClientState::PENDING_CLAIM);
@@ -339,12 +349,8 @@ void Client::tick_mqtt_connecting() {
     char mqtt_cid[48];
     snprintf(mqtt_cid, sizeof(mqtt_cid), "hxtp-%s", core_.device_id());
 
-    bool ok = mqtt_client_.connect(mqtt_cid, core_.device_id(), (const char*)nullptr); // Using device_id as username, no pwd yet or secret as pwd
-    /* Note: If the backend expects device_secret as MQTT password, use:
-     * char secret_hex[65];
-     * crypto::hex_encode(core_.device_secret(), SecretLen, secret_hex);
-     * ok = mqtt_client_.connect(mqtt_cid, core_.device_id(), secret_hex);
-     */
+    /* Use short-lived session token as MQTT password */
+    bool ok = mqtt_client_.connect(mqtt_cid, core_.device_id(), mqtt_session_token_);
 
     if (ok) {
         reconnect_delay_ms_ = 1000; /* Reset backoff on success */
@@ -363,8 +369,10 @@ void Client::tick_subscribing() {
 
         /* Send HELLO */
         size_t out_len = 0;
-        Error err = core_.build_hello(tx_buf_, sizeof(tx_buf_), &out_len);
+        char msg_id[37];
+        Error err = core_.build_hello(tx_buf_, sizeof(tx_buf_), &out_len, msg_id);
         if (err == Error::OK && out_len > 0) {
+            hello_msg_id_.set(msg_id);
             char topic[128];
             core_.build_topic(Channel::HELLO, topic, sizeof(topic));
             mqtt_client_.publish(topic, tx_buf_, out_len);
@@ -378,15 +386,25 @@ void Client::tick_subscribing() {
 void Client::tick_hello() {
     mqtt_client_.loop();
 
-    /* Transition to READY after a short delay to allow server to process HELLO.
-     * Real production would wait for a HELLO_ACK, but protocol spec allows
-     * immediate transition for embedded devices. */
-    if (millis() - state_enter_ms_ > 2000) {
-        set_state(ClientState::READY);
+    /* Timeout after 30 seconds if no HELLO_ACK received */
+    if (millis() - state_enter_ms_ > 30000) {
+        Serial.println("[HXTP] HELLO handshake timeout. Reconnecting...");
+        set_state(ClientState::RECONNECTING);
     }
 }
 
 void Client::tick_ready() {
+    /* Check MQTT Session Expiry */
+    if (session_expiry_ms_ > 0) {
+        int64_t now_ms = platform_crypto_.get_epoch_ms();
+        if (now_ms >= session_expiry_ms_) {
+            Serial.println("[HXTP] MQTT session token expired. Re-bootstrapping...");
+            mqtt_client_.disconnect();
+            set_state(ClientState::BOOTSTRAPPING);
+            return;
+        }
+    }
+
     /* MQTT keepalive */
     if (!mqtt_client_.loop()) {
         /* Connection lost */
@@ -442,6 +460,13 @@ void Client::tick_pending_claim() {
     }
 }
 
+void Client::tick_claimed() {
+    /* Same as pending_claim, wait for cloud to confirm transition to ACTIVE or READY */
+    if (millis() - state_enter_ms_ > 30000) {
+        set_state(ClientState::BOOTSTRAPPING);
+    }
+}
+
 /* ── Heartbeat ──────────────────────────────────────────────────────── */
 
 void Client::send_heartbeat() {
@@ -484,6 +509,20 @@ void Client::mqtt_on_message(const char* topic, const uint8_t* payload, unsigned
 
     /* Process through core engine */
     size_t ack_len = 0;
+    
+    /* We need to peek if this is an ACK for our HELLO */
+    if (state_ == ClientState::HELLO_SENT && !hello_msg_id_.empty()) {
+        /* Minimal peek at JSON for ref_message_id */
+        char ref_id[37];
+        if (json_get_string((const char*)payload, length, "ref_message_id", ref_id, sizeof(ref_id), nullptr)) {
+            if (hello_msg_id_.equals(ref_id)) {
+                Serial.println("[HXTP] HELLO acknowledged by cloud. Transitioning to ACTIVE.");
+                set_state(ClientState::ACTIVE);
+                hello_msg_id_.clear();
+            }
+        }
+    }
+
     Error err = core_.process_inbound(
         topic,
         payload, static_cast<size_t>(length),
@@ -567,9 +606,11 @@ const char* Client::stateStr() const {
         case ClientState::MQTT_LINKED:   return "MQTT_CONNECTED";
         case ClientState::SUBSCRIBING:      return "SUBSCRIBING";
         case ClientState::HELLO_SENT:       return "HELLO_SENT";
-        case ClientState::READY:            return "READY";
+        case ClientState::ACTIVE:           return "ACTIVE";
         case ClientState::RECONNECTING:     return "RECONNECTING";
         case ClientState::PENDING_CLAIM:    return "PENDING_CLAIM";
+        case ClientState::CLAIMED:          return "CLAIMED";
+        case ClientState::REVOKED:          return "REVOKED";
         case ClientState::ERROR_STATE:      return "ERROR";
         default:                                return "UNKNOWN";
     }
