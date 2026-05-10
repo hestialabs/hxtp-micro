@@ -670,10 +670,10 @@ Error Core::build_signed_json(
 
     /* Compute payload hash (SHA-256 of canonicalized params JSON) */
     char payload_hash[Sha256HexLen + 1];
-    {
-        const char* hash_input = (body_json && body_len > 0) ? body_json : "{}";
-        uint32_t hash_input_len = (body_json && body_len > 0) ? body_len : 2;
+    const char* hash_input = (body_json && body_len > 0) ? body_json : "{}";
+    uint32_t hash_input_len = (body_json && body_len > 0) ? body_len : 2;
 
+    {
         /* Canonicalize params for hashing (matches CanonicalParamsJson in other SDKs) */
         char canonical_params[1024];
         size_t cp_len = 0;
