@@ -241,6 +241,10 @@ void Client::loop() {
             tick_claimed();
             break;
 
+        case ClientState::REVOKED:
+            /* Device permanently disabled. Do nothing. */
+            break;
+
         case ClientState::ERROR_STATE:
             break;
     }

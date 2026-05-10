@@ -727,7 +727,7 @@ Error Core::build_signed_json(
     if (err != Error::OK) return err;
 
     /* Build full outbound JSON () */
-snprintf(json_out, json_cap,
+    int written = snprintf(json_out, json_cap,
         "{"
         "\"client_id\":\"%s\","
         "\"device_id\":\"%s\","

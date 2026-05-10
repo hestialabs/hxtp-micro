@@ -26,6 +26,7 @@
 #endif
 
 namespace hxtp {
+class Core;
 
 class Provisioning {
 public:

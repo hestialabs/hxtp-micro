@@ -18,6 +18,7 @@
 
 #include "Crypto.h"
 #include "Config.h"
+#include "HxtpCryptoInternal.h"
 #include <cstring>
 
 /* ESP8266 Arduino core Crypto.h — wraps BearSSL */
@@ -28,6 +29,8 @@
 #include <bearssl/bearssl_block.h>
 #include <bearssl/bearssl_aead.h>
 #include <bearssl/bearssl_ec.h>
+#include <bearssl/bearssl_eddsa.h>
+#include <bearssl/bearssl_hash.h>
 #endif
 
 namespace hxtp {
@@ -93,12 +96,11 @@ bool base64_encode(const uint8_t* in, size_t in_len, char* out, size_t out_cap, 
 /* ── SHA-256 (via ESP8266 Crypto.h → BearSSL) ──────────────────────── */
 
 Error sha256(const uint8_t* data, size_t len, uint8_t out[Sha256Len]) {
-    /*
-     * experimental::crypto::SHA256::hash(data, dataLength, resultArray)
-     * Returns pointer to resultArray on success.
-     */
-    const void* result = experimental::crypto::SHA256::hash(data, len, out);
-    return result ? Error::OK : Error::SHA256_COMPUTE_FAILED;
+    br_sha256_context ctx;
+    br_sha256_init(&ctx);
+    br_sha256_update(&ctx, data, len);
+    br_sha256_out(&ctx, out);
+    return Error::OK;
 }
 
 Error sha256_hex(const char* str, size_t str_len, char out_hex[Sha256HexLen + 1]) {
@@ -116,17 +118,16 @@ Error hmac_sha256(
     const uint8_t* data, size_t data_len,
     uint8_t out[HmacLen]
 ) {
-    /*
-     * experimental::crypto::SHA256::hmac(data, dataLength, hashKey, hashKeyLength,
-     *                                    resultArray, outputLength)
-     * outputLength=0 means use NATURAL_LENGTH (32).
-     */
-    const void* result = experimental::crypto::SHA256::hmac(
-        data, data_len,
-        key, key_len,
-        out, 0  /* 0 = full NATURAL_LENGTH = 32 bytes */
-    );
-    return result ? Error::OK : Error::HMAC_COMPUTE_FAILED;
+    br_hmac_key_context kc;
+    br_sha256_context sc;
+    br_hmac_context hc;
+
+    br_hmac_key_init(&kc, &br_sha256_vtable, key, key_len);
+    br_hmac_init(&hc, &kc, 32);
+    br_hmac_update(&hc, data, data_len);
+    br_hmac_out(&hc, out);
+
+    return Error::OK;
 }
 
 Error hmac_sha256_hex(
@@ -294,14 +295,8 @@ Error ed25519_keygen(
     uint8_t priv[Ed25519PrivKeyLen],
     bool (*rng)(uint8_t*, size_t)
 ) {
-    if (!rng(priv, Ed25519PrivKeyLen)) return Error::RNG_FAILED;
-
-    /*
-     * BearSSL's EdDSA implementation usually requires the m15 or i31 engines.
-     * keygen derives the public key from the private seed.
-     */
-    br_eddsa_m15_generate_pubkey(&br_ed25519_m15_sign, pub, priv);
-    return Error::OK;
+    int ret = hxtp_crypto_sign_keypair(pub, priv, (int (*)(uint8_t*, size_t))rng);
+    return (ret == 0) ? Error::OK : Error::KEYGEN_FAILED;
 }
 
 Error ed25519_sign(
@@ -310,13 +305,17 @@ Error ed25519_sign(
     const uint8_t pub[Ed25519PubKeyLen],
     uint8_t sig[Ed25519SigLen]
 ) {
-    /*
-     * BearSSL EdDSA signing:
-     * br_eddsa_m15_sign(engine, priv_seed, pub, hash_id, msg, msg_len, sig)
-     * For Ed25519, hash_id is usually not used (it's internal to the spec).
-     */
-    size_t slen = br_ed25519_m15_sign.sign(priv, pub, msg, len, sig);
-    return (slen == Ed25519SigLen) ? Error::OK : Error::SIGN_FAILED;
+    int ret = hxtp_crypto_sign_detached(sig, msg, len, priv, pub);
+    return (ret == 0) ? Error::OK : Error::SIGN_FAILED;
+}
+
+Error ed25519_verify(
+    const uint8_t* msg, size_t len,
+    const uint8_t pub[Ed25519PubKeyLen],
+    const uint8_t sig[Ed25519SigLen]
+) {
+    int ret = hxtp_crypto_sign_verify(sig, msg, len, pub);
+    return (ret == 0) ? Error::OK : Error::VERIFY_FAILED;
 }
 
 } /* namespace crypto */

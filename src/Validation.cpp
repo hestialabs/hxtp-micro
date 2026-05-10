@@ -54,7 +54,6 @@ bool NonceCache::check_and_insert(const char* nonce, int64_t now_ms) {
             return true; /* DUPLICATE */
         }
     }
-
     /* ── Insert into ring buffer ──────────────────────── */
     NonceEntry& slot = entries[head];
     size_t nlen = strlen(nonce);
@@ -106,7 +105,6 @@ void ValidationContext::init() {
  *  Canonical String Builder
  * ════════════════════════════════════════════════════════════════════ */
 
-static void canonicalize_variant(JsonVariantConst src, JsonVariant dst);
 
 
 /**

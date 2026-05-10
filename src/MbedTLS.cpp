@@ -13,6 +13,7 @@
 
 #include "Crypto.h"
 #include "Config.h"
+#include "HxtpCryptoInternal.h"
 #include <cstring>
 
 /* ── mbedTLS headers ────────────────────────────────────────────────── */
@@ -308,39 +309,8 @@ Error ed25519_keygen(
     uint8_t priv[Ed25519PrivKeyLen],
     bool (*rng)(uint8_t*, size_t)
 ) {
-    /* 
-     * In a real ESP32 environment, we'd use mbedtls_pk_setup
-     * but to keep this deterministic and zero-heap where possible,
-     * we generate the seed (priv) and then derive the pub key.
-     */
-    if (!rng(priv, Ed25519PrivKeyLen)) return Error::RNG_FAILED;
-
-    mbedtls_ecp_group grp;
-    mbedtls_ecp_point P;
-    mbedtls_mpi d;
-
-    mbedtls_ecp_group_init(&grp);
-    mbedtls_ecp_point_init(&P);
-    mbedtls_mpi_init(&d);
-
-    int ret = mbedtls_ecp_group_load(&grp, MBEDTLS_ECP_DP_ED25519);
-    if (ret == 0) {
-        /* Derive pub from priv (seed) */
-        ret = mbedtls_mpi_read_binary(&d, priv, Ed25519PrivKeyLen);
-        if (ret == 0) {
-            ret = mbedtls_ecp_mul(&grp, &P, &d, &grp.G, nullptr, nullptr);
-            if (ret == 0) {
-                size_t olen;
-                ret = mbedtls_ecp_point_write_binary(&grp, &P, MBEDTLS_ECP_PF_COMPRESSED, &olen, pub, Ed25519PubKeyLen);
-            }
-        }
-    }
-
-    mbedtls_ecp_group_free(&grp);
-    mbedtls_ecp_point_free(&P);
-    mbedtls_mpi_free(&d);
-
-    return (ret == 0) ? Error::OK : Error::CRYPTO_INIT_FAILED;
+    int ret = hxtp_crypto_sign_keypair(pub, priv, (int (*)(uint8_t*, size_t))rng);
+    return (ret == 0) ? Error::OK : Error::KEYGEN_FAILED;
 }
 
 Error ed25519_sign(
@@ -349,25 +319,19 @@ Error ed25519_sign(
     const uint8_t pub[Ed25519PubKeyLen],
     uint8_t sig[Ed25519SigLen]
 ) {
-    /*
-     * Signing requires a full PK context or low-level EdDSA calls.
-     * Most mbedTLS versions on ESP32 support Ed25519 via the PK module.
-     */
-    mbedtls_pk_context pk;
-    mbedtls_pk_init(&pk);
-
-    int ret = mbedtls_pk_setup(&pk, mbedtls_pk_info_from_type(MBEDTLS_PK_ED25519));
-    if (ret == 0) {
-        /* This is a simplified placeholder for the actual EdDSA sign logic
-         * which usually involves a special mbedtls_pk_sign call. */
-        // ret = mbedtls_pk_sign(&pk, MBEDTLS_MD_NONE, hash, hlen, sig, &slen, ...);
-        /* For the sake of the refactor, we'll assume the environment has the Ed25519 sign helper */
-        (void)msg; (void)len; (void)priv; (void)pub; (void)sig;
-        ret = 0; 
-    }
-
-    mbedtls_pk_free(&pk);
+    /* TweetNaCl sk is [seed(32) | pub(32)] */
+    /* Our priv is the 32-byte seed. */
+    int ret = hxtp_crypto_sign_detached(sig, msg, len, priv, pub);
     return (ret == 0) ? Error::OK : Error::SIGN_FAILED;
+}
+
+Error ed25519_verify(
+    const uint8_t* msg, size_t len,
+    const uint8_t pub[Ed25519PubKeyLen],
+    const uint8_t sig[Ed25519SigLen]
+) {
+    int ret = hxtp_crypto_sign_verify(sig, msg, len, pub);
+    return (ret == 0) ? Error::OK : Error::VERIFY_FAILED;
 }
 
 } /* namespace crypto */

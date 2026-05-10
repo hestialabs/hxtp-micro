@@ -59,6 +59,10 @@ enum class Error : uint16_t {
     RNG_FAILED                  = 4005,
     SECRET_NOT_FOUND            = 4006,
     SECRET_CORRUPT              = 4007,
+    SIGN_FAILED                 = 4008,
+    KEYGEN_FAILED               = 4009,
+    VERIFY_FAILED               = 4010,
+    CRYPTO_UNAVAILABLE          = 4011,
 
     /* Frame errors */
     FRAME_TOO_SHORT             = 5001,
@@ -80,6 +84,7 @@ enum class Error : uint16_t {
     NOT_INITIALIZED             = 9002,
     PROTOCOL_NOT_READY          = 9003,
     BUFFER_OVERFLOW             = 9004,
+    NOT_IMPLEMENTED             = 9005,
 };
 
 /* ── Error code to string (for logging / debug) ─────────────────────── */
@@ -119,6 +124,10 @@ inline const char* error_str(Error e) {
         case Error::RNG_FAILED:                 return "RNG_FAILED";
         case Error::SECRET_NOT_FOUND:           return "SECRET_NOT_FOUND";
         case Error::SECRET_CORRUPT:             return "SECRET_CORRUPT";
+        case Error::SIGN_FAILED:                return "SIGN_FAILED";
+        case Error::KEYGEN_FAILED:              return "KEYGEN_FAILED";
+        case Error::VERIFY_FAILED:              return "VERIFY_FAILED";
+        case Error::CRYPTO_UNAVAILABLE:         return "CRYPTO_UNAVAILABLE";
         case Error::FRAME_TOO_SHORT:            return "FRAME_TOO_SHORT";
         case Error::FRAME_MAGIC_INVALID:        return "FRAME_MAGIC_INVALID";
         case Error::FRAME_VERSION_INVALID:      return "FRAME_VERSION_INVALID";
@@ -134,6 +143,7 @@ inline const char* error_str(Error e) {
         case Error::NOT_INITIALIZED:            return "NOT_INITIALIZED";
         case Error::PROTOCOL_NOT_READY:         return "PROTOCOL_NOT_READY";
         case Error::BUFFER_OVERFLOW:            return "BUFFER_OVERFLOW";
+        case Error::NOT_IMPLEMENTED:            return "NOT_IMPLEMENTED";
         default:                                     return "UNKNOWN_ERROR";
     }
 }
