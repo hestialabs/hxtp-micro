@@ -1,4 +1,4 @@
-# 🛡️ HXTP 
+# 🛡️ HxTP-micro
 
 [![Version](https://img.shields.io/badge/version-1.0.7-blue.svg)](https://github.com/hestialabs/hxtp-micro)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.txt)
