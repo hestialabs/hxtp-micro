@@ -1,4 +1,4 @@
-# 🛡️ HXTP Embedded SDK
+# 🛡️ HXTP 
 
 [![Version](https://img.shields.io/badge/version-1.0.7-blue.svg)](https://github.com/hestialabs/hxtp-micro)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.txt)
@@ -29,7 +29,7 @@ platform = espressif32
 board = esp32dev
 framework = arduino
 lib_deps =
-    HXTP Embedded SDK
+    hxtp-micro
     knolleary/PubSubClient@^2.8
 build_flags =
     -std=gnu++17
