@@ -1,44 +1,37 @@
 /*
- * HXTP Micro SDK - Telemetry Device Example (Zero-Config)
+ * hxtp-micro - Telemetry Device Example (Sensor Data Publishing)
  * 
- * Demonstrates:
- *   1. Zero-config provisioning flow.
- *   2. Periodically publishing sensor telemetry to the cloud.
- *   3. Non-blocking state management.
+ * This example demonstrates:
+ *   1. Periodic publishing of sensor data (telemetry).
+ *   2. Automatic signature and sequence management.
+ *   3. Non-blocking state-aware execution.
  * 
  * Copyright (c) 2026 Hestia Labs
  * SDK-License-Identifier: MIT
  */
 
 #include <Arduino.h>
-#include "Hxtp.h"
+#include <Hxtp.h>
 
-// ---- Global HXTP Client ----
+// ---- Global hxtp-micro Client ----
 hxtp::Client* hxtpClient = nullptr;
 
 unsigned long lastTelemetryMs = 0;
-const unsigned long TELEMETRY_INTERVAL = 30000; // Publish every 30 seconds
-
-// ---- SDK Event Callbacks ----
-void onHxtpStateChange(hxtp::ClientState oldState, hxtp::ClientState newState, void*) {
-    Serial.printf("[HXTP] State: %s\n", hxtpClient->stateStr());
-}
+const unsigned long TELEMETRY_INTERVAL = 60000; // Publish every 1 minute
 
 void setup() {
     Serial.begin(115200);
     delay(1000);
-    Serial.println("\n--- HxTP Telemetry Device Starting ---");
+    Serial.println("\n--- hxtp-micro Telemetry Node Starting ---");
 
-    // 1. Configure the HXTP Client
+    // 1. Configure the Client
     hxtp::Config config;
-    config.device_type      = "telemetry-node";
-    config.firmware_version = "1.0.5";
+    config.device_type      = "sensor-node";
+    config.firmware_version = "1.0.3";
     config.verify_server    = true; 
 
     // 2. Initialize the Client
     hxtpClient = new hxtp::Client(config);
-    hxtpClient->onStateChange(onHxtpStateChange, nullptr);
-
     hxtpClient->begin();
 
     // 3. Start Connection Lifecycle
@@ -50,7 +43,7 @@ void loop() {
         hxtpClient->loop();
         
         // 4. Publish telemetry when READY
-        if (hxtpClient->state() == hxtp::ClientState::READY) {
+        if (hxtpClient->isConnected()) {
             if (millis() - lastTelemetryMs >= TELEMETRY_INTERVAL) {
                 lastTelemetryMs = millis();
                 
@@ -60,12 +53,12 @@ void loop() {
                 
                 char payload[128];
                 snprintf(payload, sizeof(payload), 
-                         "{\"temperature\":%.2f,\"humidity\":%.2f,\"status\":\"nominal\"}", 
+                         "{\"temp\":%.2f,\"hum\":%.2f,\"unit\":\"C\"}", 
                          temp, hum);
                     
                 Serial.printf("[Sensor] Data: %s\n", payload);
                 
-                // publishTelemetry handles framing, signing, and sequence management
+                // publishTelemetry handles deterministic framing and HMAC signing
                 hxtpClient->publishTelemetry(payload, strlen(payload));
             }
         }
