@@ -125,17 +125,6 @@ HxTP-micro is designed around the following principles:
 
 ---
 
-# Platform Support
-
-| Platform | Status    |
-| -------- | --------- |
-| ESP32    | Supported |
-| ESP32-S3 | Supported |
-| ESP32-C3 | Supported |
-| ESP8266  | Supported |
-
----
-
 # License
 
 This project is licensed under the MIT License. See `LICENSE.txt` for details.
