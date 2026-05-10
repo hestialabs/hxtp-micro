@@ -109,6 +109,9 @@ void ValidationContext::init() {
  *  Canonical String Builder
  * ════════════════════════════════════════════════════════════════════ */
 
+static void canonicalize_variant(JsonVariantConst src, JsonVariant dst);
+
+
 /**
  * Escapes a field for HxTP/3.1 pipe-separated framing.
  * Rules: \ -> \\, | -> \|, \n -> \n, \r -> \r
