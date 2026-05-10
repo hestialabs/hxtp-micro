@@ -30,7 +30,7 @@ platform = espressif32
 board = esp32dev
 framework = arduino
 lib_deps =
-    hxtp-micro@^1.0.3
+    hxtp-micro@^1.0.2
     knolleary/PubSubClient@^2.8
     bblanchon/ArduinoJson@^7.0.0
 build_flags =
