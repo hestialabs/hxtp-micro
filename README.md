@@ -29,7 +29,7 @@ platform = espressif32
 board = esp32dev
 framework = arduino
 lib_deps =
-    hxtp-micro
+    HXTP Embedded SDK
     knolleary/PubSubClient@^2.8
 build_flags =
     -std=gnu++17
