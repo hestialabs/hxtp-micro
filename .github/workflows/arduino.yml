@@ -21,6 +21,8 @@ on:
             - "platformio.ini"
             - "library.properties"
             - ".github/workflows/**"
+            - "README.md"
+            - "examples/**"
         tags: ["v*"]
     pull_request:
         branches: [main]
@@ -29,6 +31,8 @@ on:
             - "platformio.ini"
             - "library.properties"
             - ".github/workflows/**"
+            - "README.md"
+            - "examples/**"
 
 jobs:
     # ── Build: ESP32-S3 (primary target) ─────────────────────────────
