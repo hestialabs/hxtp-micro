@@ -67,7 +67,8 @@ enum class ClientState : uint8_t {
     HELLO_SENT      = 9,    /* HELLO handshake sent */
     READY           = 10,   /* Fully operational */
     RECONNECTING    = 11,   /* Lost connection, retrying */
-    ERROR_STATE     = 12,   /* Fatal error */
+    PENDING_CLAIM   = 12,   /* Bootstrapped but not yet claimed */
+    ERROR_STATE     = 13,   /* Fatal error */
 };
 
 /* ── Callback Types ─────────────────────────────────────────────────── */
@@ -150,6 +151,7 @@ public:
     const char* deviceId() const { return core_.device_id(); }
     const char* tenantId() const { return core_.tenant_id(); }
 
+
 private:
     /* ── State Machine Handlers ────────────────────────── */
     void tick_provisioning();
@@ -161,6 +163,7 @@ private:
     void tick_hello();
     void tick_ready();
     void tick_reconnecting();
+    void tick_pending_claim();
 
     /* ── MQTT Message Handler ──────────────────────────── */
     static void mqtt_callback_static(char* topic, uint8_t* payload, unsigned int length);

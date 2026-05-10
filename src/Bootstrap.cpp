@@ -28,7 +28,7 @@ BootstrapConfig Bootstrap::perform(const char* api_url) {
     if (!base_url) return config;
 
     char url[256];
-    snprintf(url, sizeof(url), "%s/device/%s/bootstrap", base_url, core_->device_id());
+    snprintf(url, sizeof(url), "%s/api/v1/devices/%s/bootstrap", base_url, core_->device_id());
 
     /* ── Prepare Headers (HMAC Signing) ──────────────────── */
     char nonce[MaxNonceLen + 1];
@@ -99,7 +99,28 @@ BootstrapConfig Bootstrap::perform(const char* api_url) {
         size_t jlen = body.length();
 
         /* ── Parse Response (Zero-Allocation) ─────────────── */
+        char state_str[32];
         char endpoint[128];
+
+        config.activation_state = DeviceActivationState::BOOTSTRAP;
+
+        /* Activation State */
+        if (json_get_string(json, jlen, "activation_state", state_str, sizeof(state_str), nullptr)) {
+            if (strcmp(state_str, "active") == 0) {
+                config.activation_state = DeviceActivationState::ACTIVE;
+                config.success = true;
+            } else if (strcmp(state_str, "pending_claim") == 0) {
+                config.activation_state = DeviceActivationState::PENDING_CLAIM;
+                config.success = true; 
+            } else if (strcmp(state_str, "revoked") == 0) {
+                config.activation_state = DeviceActivationState::REVOKED;
+                Serial.println("[HXTP] DEVICE REVOKED BY CLOUD");
+                config.success = false;
+                return config;
+            }
+        }
+
+        /* 2. MQTT Endpoint */
         if (json_get_string(json, jlen, "mqtt_endpoint", endpoint, sizeof(endpoint), nullptr)) {
             // Parse mqtts://host:port
             const char* host_start = strstr(endpoint, "://");

@@ -17,12 +17,9 @@
 
 #include "Validation.h"
 #include "Crypto.h"
+#include "Core.h"     /* for json_canonicalize */
 #include <cstdio>     /* snprintf */
 #include <cstring>    /* strcmp, memset */
-#include <ArduinoJson.h>
-#include <vector>
-#include <algorithm>
-#include <iterator>
 
 namespace hxtp {
 
@@ -149,7 +146,14 @@ bool build_canonical_params(
     char* out,
     size_t out_cap,
     size_t* out_len
-);
+) {
+    if (!params_json || !out || out_cap == 0) return false;
+    
+    /* ── Simple Canonicalization: Strip Whitespace ── */
+    json_canonicalize(params_json, out);
+    if (out_len) *out_len = strlen(out);
+    return true;
+}
 
 bool build_canonical_string(
     const MessageHeader* hdr,
@@ -161,69 +165,37 @@ bool build_canonical_string(
 {
     if (!hdr || !out || out_cap == 0) return false;
 
-    if (hdr->version.equals("HxTP/3.1")) {
-        // ── HxTP/3.1: Pipe-separated with Escaping ──────────
-        size_t total = 0;
-        
-        auto append_field = [&](const char* f, bool last = false) -> bool {
-            size_t len = escape_field(f, out + total, out_cap - total);
-            total += len;
-            if (!last && total < (out_cap - 1)) {
-                out[total++] = '|';
-            }
-            return total < out_cap;
-        };
-
-        char seq_str[32], ts_str[32];
-        snprintf(seq_str, sizeof(seq_str), "%lld", static_cast<long long>(hdr->sequence_number));
-        snprintf(ts_str, sizeof(ts_str), "%lld", static_cast<long long>(hdr->timestamp));
-
-        if (!append_field(hdr->version.c_str())) return false;
-        if (!append_field(hdr->device_id.c_str())) return false;
-        if (!append_field(hdr->client_id.c_str())) return false;
-        if (!append_field(hdr->message_id.c_str())) return false;
-        if (!append_field(hdr->request_id.c_str())) return false;
-        if (!append_field(seq_str)) return false;
-        if (!append_field(ts_str)) return false;
-        if (!append_field(hdr->nonce.c_str())) return false;
-        if (!append_field(hdr->message_type.c_str())) return false;
-        if (!append_field(hdr->payload_hash.c_str(), true)) return false;
-
-        out[total] = '\0';
-        if (out_len) *out_len = total;
-        return true;
-    } else {
-        // ── HxTP/3.0: Deterministic JSON (Legacy Fallback) ──
-        JsonDocument doc;
-        doc["client_id"] = hdr->client_id.c_str();
-        doc["device_id"] = hdr->device_id.c_str();
-        doc["message_id"] = hdr->message_id.c_str();
-        doc["message_type"] = hdr->message_type.c_str();
-        doc["nonce"] = hdr->nonce.c_str();
-        
-        if (params_json && params_len > 0) {
-            JsonDocument paramsDoc;
-            deserializeJson(paramsDoc, params_json, params_len);
-            doc["params"] = paramsDoc.as<JsonVariant>();
-        } else {
-            doc["params"] = JsonObject();
+    // ── HxTP/3.1: Pipe-separated with Escaping ──────────
+    size_t total = 0;
+    
+    auto append_field = [&](const char* f, bool last = false) -> bool {
+        size_t len = escape_field(f, out + total, out_cap - total);
+        total += len;
+        if (!last && total < (out_cap - 1)) {
+            out[total++] = '|';
         }
-        
-        doc["payload_hash"] = hdr->payload_hash.c_str();
-        doc["protocol"] = "hxtp/3.0";
-        doc["request_id"] = hdr->request_id.c_str();
-        doc["sequence_number"] = hdr->sequence_number;
-        doc["tenant_id"] = hdr->tenant_id.c_str();
-        doc["timestamp"] = hdr->timestamp;
-        doc["version"] = hdr->version.c_str();
+        return total < out_cap;
+    };
 
-        JsonDocument sortedDoc;
-        canonicalize_variant(doc.as<JsonVariant>(), sortedDoc.as<JsonVariant>());
-        
-        size_t written = serializeJson(sortedDoc, out, out_cap);
-        if (out_len) *out_len = written;
-        return written < out_cap;
-    }
+    char seq_str[32], ts_str[32];
+    snprintf(seq_str, sizeof(seq_str), "%lld", static_cast<long long>(hdr->sequence_number));
+    snprintf(ts_str, sizeof(ts_str), "%lld", static_cast<long long>(hdr->timestamp));
+
+    if (!append_field(hdr->version.c_str())) return false;
+    if (!append_field(hdr->device_id.c_str())) return false;
+    if (!append_field(hdr->tenant_id.c_str())) return false;
+    if (!append_field(hdr->client_id.c_str())) return false;
+    if (!append_field(hdr->message_id.c_str())) return false;
+    if (!append_field(hdr->request_id.c_str())) return false;
+    if (!append_field(seq_str)) return false;
+    if (!append_field(ts_str)) return false;
+    if (!append_field(hdr->nonce.c_str())) return false;
+    if (!append_field(hdr->message_type.c_str())) return false;
+    if (!append_field(hdr->payload_hash.c_str(), true)) return false;
+
+    out[total] = '\0';
+    if (out_len) *out_len = total;
+    return true;
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -326,71 +298,7 @@ bool build_canonical_params(
     char* out,
     size_t out_cap,
     size_t* out_len)
-{
-    if (!params_json || !out || out_cap == 0) return false;
 
-    JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, params_json, params_len);
-    if (err) {
-        /* If not a valid JSON object/array, treat as literal if possible, or fail */
-        if (params_len == 0 || (params_len == 2 && strcmp(params_json, "{}") == 0)) {
-            doc.to<JsonObject>();
-        } else {
-            return false;
-        }
-    }
-
-    JsonDocument sortedDoc;
-    canonicalize_variant(doc.as<JsonVariantConst>(), sortedDoc.as<JsonVariant>());
-
-    size_t written = serializeJson(sortedDoc, out, out_cap);
-    if (out_len) *out_len = written;
-    return (written < out_cap);
-}
-
-static void canonicalize_variant(JsonVariantConst src, JsonVariant dst) {
-    if (src.is<JsonObjectConst>()) {
-        JsonObjectConst srcObj = src.as<JsonObjectConst>();
-        JsonObject dstObj = dst.to<JsonObject>();
-        
-        std::vector<const char*> keys;
-        std::transform(srcObj.begin(), srcObj.end(), std::back_inserter(keys), [](JsonPairConst kv) {
-            return kv.key().c_str();
-        });
-        std::sort(keys.begin(), keys.end(), [](const char* a, const char* b) {
-            return strcmp(a, b) < 0;
-        });
-        
-        for (const char* k : keys) {
-            canonicalize_variant(srcObj[k], dstObj[k]);
-        }
-    } else if (src.is<JsonArrayConst>()) {
-        JsonArrayConst srcArr = src.as<JsonArrayConst>();
-        JsonArray dstArr = dst.to<JsonArray>();
-        for (JsonVariantConst elem : srcArr) {
-            canonicalize_variant(elem, dstArr.add<JsonVariant>());
-        }
-    } else if (src.is<float>() || src.is<double>() || src.is<long>() || src.is<int>()) {
-        double d = src.as<double>();
-        char temp[64];
-        snprintf(temp, sizeof(temp), "%.20f", d);
-        int end = strlen(temp) - 1;
-        while (end >= 0 && temp[end] == '0') {
-            temp[end] = '\0';
-            end--;
-        }
-        if (end >= 0 && temp[end] == '.') {
-            temp[end] = '\0';
-            end--;
-        }
-        if (temp[0] == '\0' || (temp[0] == '-' && temp[1] == '0' && temp[2] == '\0')) {
-            strcpy(temp, "0");
-        }
-        dst.set(String(temp));
-    } else {
-        dst.set(src);
-    }
-}
 
 ValidationResult validate_payload_hash(const InboundFrame* frame) {
     /* If no payload_hash provided, skip (matches server behavior —

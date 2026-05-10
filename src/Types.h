@@ -22,7 +22,7 @@
 static constexpr uint8_t  Magic[2]           = { 0x48, 0x58 };   /* "HX" */
 static constexpr uint8_t  FramerVersion      = 3;
 static constexpr uint8_t  ProtocolMajor      = 3;
-static constexpr uint8_t  ProtocolMinor      = 0;
+static constexpr uint8_t  ProtocolMinor      = 1;
 
 static constexpr char     VersionString[]    = "HxTP/3.1";
 static constexpr char     CanonicalSep       = '|';
@@ -141,6 +141,13 @@ enum class DeviceStatus : uint8_t {
     UPDATING = 2,
 };
 
+enum class DeviceActivationState : uint8_t {
+    BOOTSTRAP     = 0,
+    PENDING_CLAIM = 1,
+    ACTIVE        = 2,
+    REVOKED       = 3,
+};
+
 /* ── Fixed-length char buffer (no heap) ─────────────────────────────── */
 
 template <size_t N>
@@ -180,10 +187,10 @@ struct FixedStr {
 struct MessageHeader {
     FixedStr<MaxVersionLen>    version;
     FixedStr<DeviceIdLen>      device_id;
+    FixedStr<UuidLen>           tenant_id;
     FixedStr<UuidLen>           client_id;
     FixedStr<UuidLen>           message_id;
     FixedStr<UuidLen>           request_id;
-    FixedStr<UuidLen>           tenant_id;
     int64_t                      timestamp;
     int64_t                      sequence_number;
     FixedStr<MaxNonceLen>      nonce;
@@ -231,7 +238,6 @@ struct InboundFrame {
 struct OutboundContext {
     const char*  message_type;   /* string wire value */
     const char*  device_id;
-    const char*  tenant_id;
     const char*  client_id;
     int64_t      timestamp;      /* Unix epoch milliseconds */
     int64_t      sequence_number;
@@ -275,9 +281,10 @@ struct Config {
 
     /* Provisioning Payload / Bootstrap */
     const char*  api_base_url;   /* e.g. "https://dash.hestialabs.in/api/v1" */
-    const char*  device_id;      /* 32-char hex */
-    const char*  tenant_id;      /* UUID */
-    const char*  device_secret;  /* 64-char hex */
+    const char*  tenant_id;      /* Routing namespace */
+    const char*  device_id;      /* Delivered via Bootstrap */
+    const char*  device_secret;  /* Delivered via Bootstrap */
+    const char*  bootstrap_token; /* Initial token for cloud identity fetch */
     uint32_t     initial_sequence;
 
     /* TLS */
@@ -296,8 +303,8 @@ struct Config {
     /* Defaults */
     Config() :
         wifi_ssid(nullptr), wifi_password(nullptr),
-        api_base_url(nullptr), device_id(nullptr), tenant_id(nullptr),
-        device_secret(nullptr), initial_sequence(0),
+        api_base_url(nullptr), tenant_id(nullptr), device_id(nullptr),
+        device_secret(nullptr), bootstrap_token(nullptr), initial_sequence(0),
         ca_cert(nullptr), verify_server(true),
         firmware_version("0.0.1"), device_type("esp32"),
         heartbeat_interval_seconds(HeartbeatIntervalSec),

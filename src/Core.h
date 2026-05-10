@@ -214,6 +214,7 @@ public:
     bool                is_secret_loaded() const { return secret_loaded_; }
     const char*         device_id() const { return device_id_; }
     const char*         tenant_id() const { return tenant_id_; }
+    void                set_identity(const char* device_id, const char* secret_hex);
     const uint8_t*      device_secret() const { return device_secret_; }
     const StorageAdapter* storage() const { return storage_; }
     const Config*       config() const { return config_; }

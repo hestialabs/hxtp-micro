@@ -55,7 +55,8 @@ public:
 private:
     void setupRoutes();
     void handleRoot();
-    void handleClaim();
+    void handleWifiSetup();
+    void handleInfo();
     void handleNotFound();
 
     StorageAdapter* storage_;

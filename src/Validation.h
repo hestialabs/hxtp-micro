@@ -126,8 +126,8 @@ ValidationResult validate_signature(
 /* ── Canonical String Builder ───────────────────────────────────────── */
 
 /**
- * Build the canonical JSON for signature computation.
- * Order: client_id, device_id, message_id, message_type, nonce, params, payload_hash, request_id, sequence_number, tenant_id, timestamp, version
+ * Build the canonical string for signature computation (HxTP/3.1).
+ * Format: version|device_id|tenant_id|client_id|message_id|request_id|sequence_number|timestamp|nonce|message_type|payload_hash
  *
  * @param hdr         Parsed message header
  * @param params_json Raw JSON of the params object

@@ -233,6 +233,10 @@ void Client::loop() {
             tick_reconnecting();
             break;
 
+        case ClientState::PENDING_CLAIM:
+            tick_pending_claim();
+            break;
+
         case ClientState::ERROR_STATE:
             break;
     }
@@ -308,10 +312,17 @@ void Client::tick_bootstrapping() {
         const_cast<Config*>(&config_)->heartbeat_interval_seconds = bcfg.heartbeat_interval_seconds;
 
         mqtt_client_.setServer(mqtt_host_, mqtt_port_);
-        set_state(ClientState::MQTT_LINKING);
         
-        Serial.print("[HXTP] Bootstrap success. Broker: ");
-        Serial.println(mqtt_host_);
+        if (bcfg.activation_state == DeviceActivationState::ACTIVE) {
+            set_state(ClientState::MQTT_LINKING);
+            Serial.print("[HXTP] Bootstrap success (ACTIVE). Broker: ");
+            Serial.println(mqtt_host_);
+        } else if (bcfg.activation_state == DeviceActivationState::PENDING_CLAIM) {
+            set_state(ClientState::PENDING_CLAIM);
+            Serial.println("[HXTP] Bootstrap success (PENDING_CLAIM). Waiting for owner...");
+        } else {
+            set_state(ClientState::RECONNECTING);
+        }
     } else {
         if (error_cb_) error_cb_(Error::BOOTSTRAP_FAILED, "Secure bootstrap failed", error_ctx_);
         set_state(ClientState::RECONNECTING);
@@ -328,12 +339,12 @@ void Client::tick_mqtt_connecting() {
     char mqtt_cid[48];
     snprintf(mqtt_cid, sizeof(mqtt_cid), "hxtp-%s", core_.device_id());
 
-    bool ok;
-    if (config_.device_id && config_.device_secret) {
-        ok = mqtt_client_.connect(mqtt_cid, config_.device_id, config_.device_secret);
-    } else {
-        ok = mqtt_client_.connect(mqtt_cid);
-    }
+    bool ok = mqtt_client_.connect(mqtt_cid, core_.device_id(), (const char*)nullptr); // Using device_id as username, no pwd yet or secret as pwd
+    /* Note: If the backend expects device_secret as MQTT password, use:
+     * char secret_hex[65];
+     * crypto::hex_encode(core_.device_secret(), SecretLen, secret_hex);
+     * ok = mqtt_client_.connect(mqtt_cid, core_.device_id(), secret_hex);
+     */
 
     if (ok) {
         reconnect_delay_ms_ = 1000; /* Reset backoff on success */
@@ -421,6 +432,13 @@ void Client::tick_reconnecting() {
         set_state(ClientState::WIFI_CONNECTING);
     } else {
         set_state(ClientState::MQTT_LINKING);
+    }
+}
+
+void Client::tick_pending_claim() {
+    /* Poll bootstrap every 30 seconds to check for claim status */
+    if (millis() - state_enter_ms_ > 30000) {
+        set_state(ClientState::BOOTSTRAPPING);
     }
 }
 
@@ -551,6 +569,7 @@ const char* Client::stateStr() const {
         case ClientState::HELLO_SENT:       return "HELLO_SENT";
         case ClientState::READY:            return "READY";
         case ClientState::RECONNECTING:     return "RECONNECTING";
+        case ClientState::PENDING_CLAIM:    return "PENDING_CLAIM";
         case ClientState::ERROR_STATE:      return "ERROR";
         default:                                return "UNKNOWN";
     }

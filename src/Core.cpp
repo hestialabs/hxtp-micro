@@ -268,6 +268,7 @@ bool json_get_bool(
  * WARNING: Does NOT sort keys. User must ensure keys are sorted.
  */
 void json_canonicalize(const char* in, char* out) {
+    if (!in || !out) return;
     bool in_quotes = false;
     const char* p = in;
     while (*p) {
@@ -643,6 +644,22 @@ int64_t Core::next_sequence() {
     return outbound_sequence_;
 }
 
+void Core::set_identity(const char* device_id, const char* secret_hex) {
+    if (device_id) {
+        strncpy(device_id_, device_id, DeviceIdLen);
+        device_id_[DeviceIdLen] = '\0';
+        memcpy(val_ctx_.device_id, device_id_, DeviceIdLen + 1);
+    }
+    if (secret_hex) {
+        size_t dlen = 0;
+        if (crypto::hex_decode(secret_hex, strlen(secret_hex), device_secret_, &dlen) && dlen == SecretLen) {
+            secret_loaded_ = true;
+            memcpy(val_ctx_.device_secret, device_secret_, SecretLen);
+            val_ctx_.secret_loaded = true;
+        }
+    }
+}
+
 /* ════════════════════════════════════════════════════════════════════
  *  Outbound Message Construction
  * ════════════════════════════════════════════════════════════════════ */
@@ -716,7 +733,7 @@ Error Core::build_signed_json(
     if (err != Error::OK) return err;
 
     /* Build full outbound JSON () */
-    int written = snprintf(json_out, json_cap,
+snprintf(json_out, json_cap,
         "{"
         "\"client_id\":\"%s\","
         "\"device_id\":\"%s\","
@@ -725,7 +742,6 @@ Error Core::build_signed_json(
         "\"nonce\":\"%s\","
         "\"params\":%.*s,"
         "\"payload_hash\":\"%s\","
-        "\"protocol\":\"hxtp/3.0\","
         "\"request_id\":\"%s\","
         "\"sequence_number\":%lld,"
         "\"signature\":\"%s\","

@@ -38,6 +38,9 @@ enum class Error : uint16_t {
     INVALID_PARAMS              = 2006,
     CAPABILITY_NOT_REGISTERED   = 2007,
     COMMAND_INVALID             = 2008,
+    DEVICE_NOT_CLAIMED          = 2009,
+    DEVICE_REVOKED              = 2010,
+    BOOTSTRAP_REJECTED          = 2011,
 
     /* Transport errors (prefixed to avoid PubSubClient macro clashes) */
     BROKER_CONNECT_FAILED       = 3001,
@@ -99,6 +102,9 @@ inline const char* error_str(Error e) {
         case Error::INVALID_PARAMS:             return "INVALID_PARAMS";
         case Error::CAPABILITY_NOT_REGISTERED:  return "CAPABILITY_NOT_REGISTERED";
         case Error::COMMAND_INVALID:            return "COMMAND_INVALID";
+        case Error::DEVICE_NOT_CLAIMED:         return "DEVICE_NOT_CLAIMED";
+        case Error::DEVICE_REVOKED:             return "DEVICE_REVOKED";
+        case Error::BOOTSTRAP_REJECTED:         return "BOOTSTRAP_REJECTED";
         case Error::BROKER_CONNECT_FAILED:      return "Broker connect failed";
         case Error::BROKER_PUBLISH_FAILED:      return "MQTT_PUBLISH_FAILED";
         case Error::BROKER_SUBSCRIBE_FAILED:    return "MQTT_SUBSCRIBE_FAILED";

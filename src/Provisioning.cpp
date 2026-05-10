@@ -53,7 +53,8 @@ void Provisioning::loop() {
 
 void Provisioning::setupRoutes() {
     server_.on("/", HTTP_GET, std::bind(&Provisioning::handleRoot, this));
-    server_.on("/hxtp/v1/claim", HTTP_POST, std::bind(&Provisioning::handleClaim, this));
+    server_.on("/wifi/setup", HTTP_POST, std::bind(&Provisioning::handleWifiSetup, this));
+    server_.on("/device/info", HTTP_GET, std::bind(&Provisioning::handleInfo, this));
     server_.onNotFound(std::bind(&Provisioning::handleNotFound, this));
 }
 
@@ -61,7 +62,7 @@ void Provisioning::handleRoot() {
     server_.send(200, "text/plain", "HXTP Provisioning Active");
 }
 
-void Provisioning::handleClaim() {
+void Provisioning::handleWifiSetup() {
     if (!server_.hasArg("plain")) {
         server_.send(400, "application/json", "{\"error\":\"MISSING_BODY\"}");
         return;
@@ -73,54 +74,48 @@ void Provisioning::handleClaim() {
 
     char ssid[64];
     char pass[64];
-    char tenant[40];
-    char device[40];
-    char secret_hex[128];
 
-    /* ── Parse Payload using Core JSON Helpers ───────── */
+    /* ── Parse Payload ───────── */
     bool ok = true;
     ok &= json_get_string(json, jlen, "wifi_ssid", ssid, sizeof(ssid), nullptr);
     ok &= json_get_string(json, jlen, "wifi_pass", pass, sizeof(pass), nullptr);
-    ok &= json_get_string(json, jlen, "tenant_id", tenant, sizeof(tenant), nullptr);
-    ok &= json_get_string(json, jlen, "device_id", device, sizeof(device), nullptr);
-    ok &= json_get_string(json, jlen, "device_secret", secret_hex, sizeof(secret_hex), nullptr);
 
     if (!ok) {
         server_.send(400, "application/json", "{\"error\":\"INVALID_JSON_OR_FIELDS\"}");
         return;
     }
 
-    /* ── Persist to Storage ────────────────────────────── */
-    if (storage_) {
-        if (storage_->write_param) {
-            storage_->write_param("wifi_ssid", ssid);
-            storage_->write_param("wifi_pass", pass);
-            storage_->write_param("tenant_id", tenant);
-        }
-        
-        if (storage_->write_device_id) {
-            storage_->write_device_id(device);
-        }
-
-        /* Decode and store binary secret */
-        uint8_t secret_bin[SecretLen];
-        size_t dlen = 0;
-        if (crypto::hex_decode(secret_hex, strlen(secret_hex), secret_bin, &dlen) && dlen == SecretLen) {
-            if (storage_->write_secret) {
-                storage_->write_secret(secret_bin, SecretLen);
-            }
-        } else {
-            /* Error decoding secret */
-            server_.send(400, "application/json", "{\"error\":\"SECRET_HEX_INVALID\"}");
-            return;
-        }
+    /* ── Persist to Storage ── */
+    if (storage_ && storage_->write_param) {
+        storage_->write_param("wifi_ssid", ssid);
+        storage_->write_param("wifi_pass", pass);
     }
 
     complete_ = true;
-    server_.send(200, "application/json", "{\"status\":\"OK\",\"message\":\"PROVISIONED\"}");
+    server_.send(200, "application/json", "{\"status\":\"OK\",\"message\":\"WIFI_CONFIGURED\"}");
     
-    Serial.println("[HXTP] Provisioning complete. Rebooting...");
+    Serial.println("[HXTP] WiFi configured via SoftAP. Rebooting...");
     delay(500);
+}
+
+void Provisioning::handleInfo() {
+    String mac = WiFi.softAPmacAddress();
+    char json[256];
+    snprintf(json, sizeof(json),
+        "{"
+        "\"device_serial\":\"%s\","
+        "\"device_model\":\"%s\","
+        "\"firmware_version\":\"%s\","
+        "\"claim_code\":\"%s\","
+        "\"public_key\":\"%s\""
+        "}",
+        mac.c_str(),
+        "esp32-hxtp", // Example model
+        "1.0.3",      // Example version
+        "CLAIM-XXXX", // Placeholder claim code
+        "PUBKEY-PLACEHOLDER" // Placeholder until ECC added
+    );
+    server_.send(200, "application/json", json);
 }
 
 void Provisioning::handleNotFound() {

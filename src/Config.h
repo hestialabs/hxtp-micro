@@ -8,7 +8,7 @@
  *
  *  The following are FROZEN and MUST NOT change:
  *
- *    1. Canonical string format (MCSS v3.0):
+ *    1. Canonical string format (HxTP/3.1):
  *       version|device_id|client_id|message_id|request_id|sequence_number|timestamp|nonce|message_type|payload_hash
  *
  *    2. Validation pipeline order (7 steps):

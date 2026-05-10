@@ -32,6 +32,7 @@ struct BootstrapConfig {
     char mqtt_host[64];
     uint16_t mqtt_port;
     uint32_t heartbeat_interval_seconds;
+    DeviceActivationState activation_state;
     bool success;
 };
 
