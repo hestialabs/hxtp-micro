@@ -21,6 +21,7 @@
 
 /* ESP8266 Arduino core Crypto.h — wraps BearSSL */
 #include <Crypto.h>
+#include <bearssl/bearssl.h>
 
 
 

@@ -69,7 +69,7 @@ static void sel25519(gf p,gf q,int b) {
 }
 
 static void pack25519(u8 *o,const gf n) {
-    int i,j;
+    int i,j,b;
     gf m,t;
     FOR(i,16) t[i]=n[i];
     car25519(t);
