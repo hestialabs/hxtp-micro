@@ -4,18 +4,19 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.txt)
 [![Platform](https://img.shields.io/badge/platform-ESP32%20%7C%20ESP8266-orange.svg)](https://espressif.com/)
 
-**HxTP-micro** is a high-performance, secure IoT SDK implementing the **HxTP/3.1** protocol. Optimized for ESP32 and ESP8266, it features zero dynamic allocation in the hot path, strict 7-step validation, and bit-perfect signature parity with Hestia Labs' backend.
+**HxTP-micro** is a high-performance, secure IoT SDK implementing the **HxTP/3.1** protocol. Optimized for ESP32 and ESP8266, it features zero dynamic allocation in the hot path, strict 7-step Ed25519 validation, and bit-perfect signature parity with Hestia Labs' backend.
 
 ---
 
 ## 🚀 Key Features
 
 - **⚡ Zero Dynamic Allocation**: High-performance core designed for memory-constrained environments.
-- **🔐 HxTP/3.1 Pipeline**: Full implementation of the 7-step security pipeline (Version, Timestamp, Size, Nonce, Hash, Sequence, Signature).
-- **🛡️ Bit-Perfect Parity**: Exact HMAC-SHA256 signature parity with Go, JS, and Python SDKs.
+- **🔐 HxTP/3.1 Ed25519 Pipeline**: Full implementation of the hardened 7-step security pipeline.
+- **🆔 Identity-as-Root**: Device generates its own Ed25519 private key. The private key NEVER leaves the device hardware.
+- **🛡️ Public-Key Trust**: Every message is signed with Ed25519. No more shared secrets or permanent credentials.
 - **📦 Multi-Platform**: Native support for ESP32 (S3, C3, DevKit) and ESP8266.
 - **🔌 Capability Registry**: Simplified handler registration for device actions.
-- **🔄 Dual-Key Rotation**: Built-in support for seamless secret rotation.
+- **🔄 Session Isolation**: MQTT transport uses short-lived tokens, isolated from protocol-level identity.
 
 ---
 
@@ -30,7 +31,7 @@ platform = espressif32
 board = esp32dev
 framework = arduino
 lib_deps =
-    hxtp-micro@^1.0.2
+    hxtp-micro@^1.0.3
     knolleary/PubSubClient@^2.8
     bblanchon/ArduinoJson@^7.0.0
 build_flags =
@@ -39,7 +40,7 @@ build_flags =
 ```
 
 ### 2. Basic Implementation
-Initialize the client and register your capabilities:
+The SDK handles identity generation and claiming automatically.
 
 ```cpp
 #include <Hxtp.h>
@@ -61,9 +62,8 @@ void setup() {
     
     // Auth & Provisioning
     config.api_base_url  = "https://api.hestialabs.in/v1";
-    config.device_id     = "your-32-char-hex-id";
-    config.tenant_id     = "your-uuid-tenant-id";
-    config.device_secret = "your-64-char-hex-secret";
+    config.device_uuid   = "permanent-hardware-id";
+    config.api_key       = "your-portal-api-key";
 
     client = new hxtp::Client(config);
     
@@ -71,13 +71,14 @@ void setup() {
     client->registerCapability(1, "toggle_led", toggle_led);
 
     // 3. Start the engine
+    // Automatically handles Identity Generation -> Claim -> Session Issue
     client->begin();
     client->connect();
 }
 
 void loop() {
     if (client) {
-        client->loop(); // Handles heartbeats, signing, and validation
+        client->loop(); // Handles heartbeats, Ed25519 signing, and validation
     }
 }
 ```
@@ -88,13 +89,13 @@ void loop() {
 
 The SDK implements a hardened **7-step validation pipeline** for every inbound message:
 
-1.  **Version Check**: Rejects any protocol version mismatch.
+1.  **Version Check**: Rejects any protocol version mismatch (must be HxTP/3.1).
 2.  **Timestamp Freshness**: Enforces strict time windows to prevent stale message execution.
 3.  **Payload Size**: Prevents buffer overflow attacks via size enforcement.
 4.  **Nonce Uniqueness**: Ring-buffered nonce cache protects against replay attacks.
 5.  **Payload Hash**: Verifies data integrity using SHA-256.
 6.  **Sequence Monotonicity**: Protects against out-of-order execution.
-7.  **Signature Verification**: Constant-time HMAC-SHA256 verification using the device secret.
+7.  **Signature Verification**: Ed25519 verification using the Cloud Root Key.
 
 ---
 
