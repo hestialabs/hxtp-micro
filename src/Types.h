@@ -278,48 +278,83 @@ struct CapabilityEntry {
     bool                active;
 };
 
-/* ── SDK Configuration ──────────────────────────────────────────────── */
+/* ── Runtime Descriptor (Dynamic) ─────────────────────────────────── */
+
+struct RuntimeDescriptor {
+    const char* platform_name;     // e.g. "arduino", "esp32", "stm32", "nrf52", "rp2040"
+    const char* board_name;        // board package / target board identifier
+    const char* mcu_family;        // optional family label
+    const char* sdk_version;
+    const char* firmware_hash;
+    const char* capabilities_hash;
+    FixedStr<HmacHexLen> descriptor_hash;
+
+    RuntimeDescriptor() :
+        platform_name(nullptr),
+        board_name(nullptr),
+        mcu_family(nullptr),
+        sdk_version(HXTP_SDK_VERSION_TAG),
+        firmware_hash(nullptr),
+        capabilities_hash(nullptr)
+    {}
+};
+
+/* ── Session Metadata (Dynamic from Bootstrap) ────────────────────── */
+
+struct SessionMetadata {
+    FixedStr<DeviceIdLen>     device_id;
+    FixedStr<UuidLen>          tenant_id;
+    DeviceActivationState      activation_state;
+    
+    /* MQTT Parameters */
+    FixedStr<128>              mqtt_endpoint;
+    FixedStr<256>              mqtt_session_token;
+    uint32_t                   heartbeat_interval_seconds;
+    
+    /* OTA Parameters */
+    FixedStr<256>              ota_manifest_url;
+    FixedStr<HmacHexLen>      ota_signature;
+    FixedStr<32>               latest_firmware_version;
+    uint32_t                   rollback_index;
+    bool                       update_available;
+
+    SessionMetadata() :
+        activation_state(DeviceActivationState::BOOTSTRAP),
+        heartbeat_interval_seconds(HeartbeatIntervalSec),
+        rollback_index(0),
+        update_available(false)
+    {}
+};
+
+/* ── SDK Configuration (Minimal) ────────────────────────────────────── */
 
 struct Config {
     /* Network */
     const char*  wifi_ssid;
     const char*  wifi_password;
 
-    /* Provisioning Payload / Bootstrap */
-    const char*  api_base_url;   /* e.g. "https://dash.hestialabs.in/api/v1" */
-    const char*  tenant_id;      /* Routing namespace */
-    const char*  device_id;      /* Delivered via Bootstrap */
-    const char*  device_secret;  /* Delivered via Bootstrap */
-    const char*  bootstrap_token; /* Initial token for cloud identity fetch */
-    uint32_t     initial_sequence;
-
+    /* Identity & Bootstrap */
+    const char*  api_base_url;    /* e.g. "https://dash.hestialabs.in/api/v1" */
+    const char*  device_uuid;      /* Permanent hardware/runtime identity */
+    const char*  api_key;          /* Initial bootstrap / session issuance token */
+    
     /* TLS */
-    const char*  ca_cert;        /* PEM root CA (required in release builds) */
+    const char*  ca_cert;         /* PEM root CA (required in release builds) */
     bool         verify_server;
 
-    /* Device Metadata */
-    const char*  firmware_version;
-    const char*  device_type;
-
     /* Tuning */
-    uint32_t     heartbeat_interval_seconds;
     uint32_t     frame_buf_size;
     uint32_t     max_reconnect_delay_ms;
 
-    /* Defaults */
     Config() :
         wifi_ssid(nullptr), wifi_password(nullptr),
-        api_base_url(nullptr), tenant_id(nullptr), device_id(nullptr),
-        device_secret(nullptr), bootstrap_token(nullptr), initial_sequence(0),
+        api_base_url(nullptr), device_uuid(nullptr), api_key(nullptr),
         ca_cert(nullptr), verify_server(true),
-        firmware_version("0.0.1"), device_type("esp32"),
-        heartbeat_interval_seconds(HeartbeatIntervalSec),
         frame_buf_size(FrameBufDefault),
         max_reconnect_delay_ms(60000)
     {}
 };
 
-} /* namespace hxtp */
 
 /* ── Platform Abstraction — Storage Interface ───────────────────────── */
 
@@ -345,6 +380,9 @@ struct PlatformCrypto {
     bool (*random_bytes)(uint8_t* out, size_t len);
     uint32_t (*get_time_ms)(void);   /* monotonic milliseconds */
     int64_t  (*get_epoch_ms)(void);  /* Unix epoch milliseconds */
+
+    /* Metadata provider */
+    void (*get_descriptor)(RuntimeDescriptor* out);
 };
 
 /* ── Validation Result ──────────────────────────────────────────────── */
@@ -373,5 +411,7 @@ struct ValidationResult {
         return { false, step, msg };
     }
 };
+
+} /* namespace hxtp */
 
 #endif /* TYPES_H */

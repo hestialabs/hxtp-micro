@@ -43,9 +43,9 @@ void setup() {
     // 1. Configure the Client
     // No hardcoded credentials needed — they arrive via Provisioning!
     hxtp::Config config;
-    config.device_type      = "basic-node";
-    config.firmware_version = "1.0.3";
-    config.verify_server    = true; // Always enable for production
+    config.device_uuid   = "00000000-0000-0000-0000-000000000000"; // Permanent Hardware UUID
+    config.api_key       = "YOUR_API_KEY";              // From Hestia Cloud Portal
+    config.verify_server = true; // Always enable for production
 
     // 2. Initialize the Client
     hxtpClient = new hxtp::Client(config);

@@ -1,6 +1,5 @@
 # HxTP Protocol Specification v3.1.0 (Canonical)
 
-**Status:** FROZEN  
 **Target:** Embedded Runtimes, Cloud Orchestration, AI Agents  
 **Governance:** Hestia Labs
 
@@ -114,3 +113,25 @@ Topics are isolated by `tenant_id`:
 - **Watchdog:** Protocol execution MUST NOT block the system watchdog.
 - **Memory:** Zero-allocation or bounded static buffers ONLY.
 - **Downgrade Protection:** Protocol version 3.0 or below MUST be rejected.
+
+---
+
+## 8. Architectural Trust Boundaries
+
+### 8.1 Runtime Descriptor Trust
+The `RuntimeDescriptor` (platform, board, mcu, etc.) is **INFORMATIONAL ONLY**. It provides telemetry and operational context but MUST NOT be used for authorization, RBAC, or capability enforcement. Cloud systems must assume descriptors can be spoofed by malicious firmware.
+
+### 8.2 OTA Trust Model
+- **Root Authority:** The SDK MUST enforce a root OTA public key for manifest verification.
+- **Manifest Signing:** All OTA manifests MUST be signed. Unsigned or incorrectly signed manifests MUST be rejected (Fail-Closed).
+- **Rollback Protection:** Manifests MUST include a monotonic `rollback_index`. Updates with a lower index than the current firmware MUST be rejected.
+- **Trust Boundary:** OTA operations during session expiry MUST trigger a re-bootstrap before applying the update.
+
+### 8.3 Runtime Attestation
+- **Descriptor Hashing:** The entire `RuntimeDescriptor` SHOULD be hashed (SHA-256) into a `descriptor_hash` for inclusion in the `HELLO` handshake.
+- **Capability Immutability:** Capabilities registered during `BOOTSTRAP` MUST be immutable once the `HELLO` handshake is complete.
+
+### 8.4 Session Rotation & Lifecycle
+- **Mid-Command Expiry:** If a session expires during a long-running command, the client MUST finish the execution and re-bootstrap before sending the `ACK`.
+- **OTA Transition:** If a session invalidation occurs during an OTA download, the client SHOULD re-bootstrap to maintain the secure channel before applying the final binary.
+- **Reboot Persistence:** Cloud-issued `tenant_id` and `mqtt_session_token` SHOULD be persisted across reboots to avoid redundant bootstrap cycles.

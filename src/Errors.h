@@ -14,6 +14,8 @@
 
 #include <cstdint>
 
+namespace hxtp {
+
 /* ── Protocol Error Codes (match server ProtocolError enum) ─────────── */
 
 enum class Error : uint16_t {
@@ -147,5 +149,7 @@ inline const char* error_str(Error e) {
         default:                                     return "UNKNOWN_ERROR";
     }
 }
+
+} /* namespace hxtp */
 
 #endif /* ERRORS_H */

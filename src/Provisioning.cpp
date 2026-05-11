@@ -100,22 +100,21 @@ void Provisioning::handleWifiSetup() {
 }
 
 void Provisioning::handleInfo() {
-    String mac = WiFi.softAPmacAddress();
     char token[512];
     bool has_token = core_->generate_claim_token(token, sizeof(token));
 
     char json[1024];
     snprintf(json, sizeof(json),
         "{"
-        "\"device_serial\":\"%s\","
-        "\"device_model\":\"%s\","
+        "\"device_uuid\":\"%s\","
+        "\"board\":\"%s\","
         "\"firmware_version\":\"%s\","
         "\"public_key\":\"%s\","
         "\"claim_token\":\"%s\""
         "}",
-        mac.c_str(),
-        "esp32-hxtp",
-        "1.0.3",
+        core_->config()->device_uuid ? core_->config()->device_uuid : "unknown",
+        core_->descriptor().board_name ? core_->descriptor().board_name : "",
+        core_->descriptor().sdk_version ? core_->descriptor().sdk_version : "",
         core_->ed25519_pub_hex(),
         has_token ? token : ""
     );

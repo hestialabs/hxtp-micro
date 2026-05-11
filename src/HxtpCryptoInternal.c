@@ -8,6 +8,7 @@
 
 #include "HxtpCryptoInternal.h"
 #include <string.h>
+#include <stdlib.h>
 
 typedef uint8_t u8;
 typedef uint32_t u32;
@@ -15,11 +16,10 @@ typedef uint64_t u64;
 typedef int64_t i64;
 typedef i64 gf[16];
 
-#define FOR(i,n) for (i = 0;i < n;++i)
+#define FOR(i,n) for (i = 0; (u64)i < (u64)n; ++i)
 
 static const gf gf0 = {0};
 static const gf gf1 = {1};
-static const gf _121665 = {0xDB41,1};
 static const gf D = {0x78a3, 0x1359, 0x4dca, 0x75eb, 0xd8ab, 0x4141, 0x0a4d, 0x0070, 0xe898, 0x7779, 0x4079, 0x8cc7, 0xfe73, 0x2b6f, 0x6cee, 0x5203};
 static const gf D2 = {0xf159, 0x26b2, 0x9b94, 0xebd6, 0xb156, 0x8283, 0x149a, 0x00e0, 0xd130, 0xeef3, 0x80f2, 0x198e, 0xfce7, 0x56df, 0xd9dc, 0x2406};
 static const gf X = {0xd51a, 0x8f25, 0x2d60, 0xc956, 0xa7b2, 0x9525, 0xc760, 0x692c, 0xdc5c, 0xfdd6, 0xe231, 0xc0a4, 0x53fe, 0xcd6e, 0x36d3, 0x2169};
@@ -335,11 +335,11 @@ static void reduce(u8 *r) {
     modL(r,x);
 }
 
-int hxtp_crypto_sign_keypair(uint8_t *pk, uint8_t *sk, int (*rng)(uint8_t*, size_t)) {
+int hxtp_crypto_sign_keypair(uint8_t *pk, uint8_t *sk, bool (*rng)(uint8_t*, size_t)) {
     u8 d[64];
     gf p[4];
     int i;
-    if (rng(sk, 32) != 1) return -1;
+    if (!rng(sk, 32)) return -1;
     crypto_hash(d, sk, 32);
     d[0] &= 248;
     d[31] &= 127;

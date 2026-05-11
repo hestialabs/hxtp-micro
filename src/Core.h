@@ -209,8 +209,8 @@ public:
     int64_t             next_sequence();
     bool                is_initialized() const { return initialized_; }
     bool                is_secret_loaded() const { return secret_loaded_; }
-    const char*         device_id() const { return device_id_; }
-    const char*         tenant_id() const { return tenant_id_; }
+    const char*         device_id() const { return session_.device_id.c_str(); }
+    const char*         tenant_id() const { return session_.tenant_id.c_str(); }
     const char*         client_id() const { return client_id_; }
     const char*         ed25519_pub_hex() const { return ed25519_pub_hex_; }
     Error               ed25519_sign(const uint8_t* msg, size_t len, uint8_t sig[Ed25519SigLen]);
@@ -221,10 +221,14 @@ public:
     const Config*       config() const { return config_; }
     const PlatformCrypto* platform() const { return platform_; }
 
+    SessionMetadata&    session() { return session_; }
+    RuntimeDescriptor&  descriptor() { return descriptor_; }
+
 private:
     /* ── Parse JSON header fields into InboundFrame ── */
     Error parse_json_header(InboundFrame* frame);
     Error parse_command_payload(InboundFrame* frame);
+    void  calculate_descriptor_hash();
 
     /* ── Build signed JSON envelope ─────────────────────── */
     Error build_signed_json(
@@ -240,9 +244,11 @@ private:
     const StorageAdapter*   storage_;
     const PlatformCrypto*   platform_;
 
-    /* Identity */
-    char    device_id_[DeviceIdLen + 1];
-    char    tenant_id_[UuidLen + 1];
+    /* Dynamic State */
+    SessionMetadata         session_;
+    RuntimeDescriptor       descriptor_;
+
+    /* Temporary/Session Identity */
     char    client_id_[UuidLen + 1];
 
     /* Root Identity (Ed25519) */

@@ -29,7 +29,8 @@
 #include <bearssl/bearssl_block.h>
 #include <bearssl/bearssl_aead.h>
 #include <bearssl/bearssl_ec.h>
-#include <bearssl/bearssl_eddsa.h>
+#include <bearssl/bearssl_hmac.h>
+/* #include <bearssl/bearssl_eddsa.h> - Removed, using HxtpCryptoInternal */
 #include <bearssl/bearssl_hash.h>
 #endif
 
@@ -119,7 +120,6 @@ Error hmac_sha256(
     uint8_t out[HmacLen]
 ) {
     br_hmac_key_context kc;
-    br_sha256_context sc;
     br_hmac_context hc;
 
     br_hmac_key_init(&kc, &br_sha256_vtable, key, key_len);
@@ -295,7 +295,7 @@ Error ed25519_keygen(
     uint8_t priv[Ed25519PrivKeyLen],
     bool (*rng)(uint8_t*, size_t)
 ) {
-    int ret = hxtp_crypto_sign_keypair(pub, priv, (int (*)(uint8_t*, size_t))rng);
+    int ret = hxtp_crypto_sign_keypair(pub, priv, rng);
     return (ret == 0) ? Error::OK : Error::KEYGEN_FAILED;
 }
 

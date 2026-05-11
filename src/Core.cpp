@@ -9,6 +9,7 @@
  */
 
 #include "Core.h"
+#include "Crypto.h"
 #include <cstdio>    /* snprintf */
 #include <cstring>   /* memcpy, memset, strcmp, strlen, strncmp */
 #include <cstdlib>   /* strtoll */
@@ -300,12 +301,12 @@ Core::Core()
     , config_(nullptr)
     , storage_(nullptr)
     , platform_(nullptr)
+    , session_()
+    , descriptor_()
     , secret_loaded_(false)
     , outbound_sequence_(0)
     , val_ctx_({})
 {
-    memset(device_id_, 0, sizeof(device_id_));
-    memset(tenant_id_, 0, sizeof(tenant_id_));
     memset(client_id_, 0, sizeof(client_id_));
     memset(ed25519_pub_, 0, sizeof(ed25519_pub_));
     memset(ed25519_priv_, 0, sizeof(ed25519_priv_));
@@ -338,29 +339,24 @@ Error Core::init(
         return Error::CRYPTO_INIT_FAILED;
     }
 
-    /* ── Device ID ─────────────────────────────────── */
-    if (config_->device_id) {
-        size_t dlen = strlen(config_->device_id);
-        if (dlen > DeviceIdLen) dlen = DeviceIdLen;
-        memcpy(device_id_, config_->device_id, dlen);
-        device_id_[dlen] = '\0';
-    } else if (storage_ && storage_->read_device_id) {
-        storage_->read_device_id(device_id_, sizeof(device_id_));
-    }
- 
-    /* If still no device ID, derive from Ed25519 pub */
-    if (device_id_[0] == '\0') {
-        memcpy(device_id_, ed25519_pub_hex_, DeviceIdLen);
-        device_id_[DeviceIdLen] = '\0';
+    /* ── Runtime Descriptor Generation ─────────────── */
+    if (platform_->get_descriptor) {
+        platform_->get_descriptor(&descriptor_);
     }
 
-    /* ── Tenant ID ─────────────────────────────────── */
-    if (config_->tenant_id) {
-        size_t tlen = strlen(config_->tenant_id);
-        if (tlen > UuidLen) tlen = UuidLen;
-        memcpy(tenant_id_, config_->tenant_id, tlen);
-        tenant_id_[tlen] = '\0';
-    }
+    /* Override with build-system injection if available */
+#ifdef HXTP_BOARD_NAME
+    descriptor_.board_name = HXTP_BOARD_NAME;
+#endif
+#ifdef HXTP_PLATFORM_NAME
+    descriptor_.platform_name = HXTP_PLATFORM_NAME;
+#endif
+
+    descriptor_.sdk_version = HXTP_SDK_VERSION_TAG;
+    descriptor_.capabilities_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+    /* Generate descriptor hash for attestation */
+    calculate_descriptor_hash();
 
     /* ── Client ID ─────────────────────────────────── */
     /* Generate a UUID v4 for this session */
@@ -368,20 +364,11 @@ Error Core::init(
     if (err != Error::OK) return err;
 
     /* ── Device Secret ─────────────────────────────── */
-    if (config_->device_secret) {
-        /* Decode hex secret */
-        size_t decoded_len = 0;
-        if (!crypto::hex_decode(
-                config_->device_secret, strlen(config_->device_secret),
-                device_secret_, &decoded_len) || decoded_len != SecretLen) {
-            return Error::SECRET_CORRUPT;
-        }
-        secret_loaded_ = true;
-    } else if (storage_ && storage_->read_secret) {
+    /* Secret is now typically delivered via bootstrap, but check storage */
+    if (storage_ && storage_->read_secret) {
         if (storage_->read_secret(device_secret_, SecretLen)) {
             secret_loaded_ = true;
         }
-        /* Not fatal — secret may arrive during provisioning */
     }
 
     /* ── Restore sequence counter ──────────────────── */
@@ -395,9 +382,8 @@ Error Core::init(
     /* ── Initialize validation context ─────────────── */
     val_ctx_.init();
     val_ctx_.get_epoch_ms = platform_->get_epoch_ms;
-    memcpy(val_ctx_.device_id, device_id_, DeviceIdLen + 1);
-    memcpy(val_ctx_.tenant_id, tenant_id_, UuidLen + 1);
-
+    
+    /* Validation identity will be updated after bootstrap */
     if (secret_loaded_) {
         memcpy(val_ctx_.device_secret, device_secret_, SecretLen);
         val_ctx_.secret_loaded = true;
@@ -405,6 +391,25 @@ Error Core::init(
 
     initialized_ = true;
     return Error::OK;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ *  Runtime Descriptor Hashing
+ * ════════════════════════════════════════════════════════════════════ */
+
+void Core::calculate_descriptor_hash() {
+    char combined[1024] = {0};
+    snprintf(combined, sizeof(combined), "%s|%s|%s|%s|%s|%s",
+        descriptor_.platform_name ? descriptor_.platform_name : "",
+        descriptor_.board_name ? descriptor_.board_name : "",
+        descriptor_.mcu_family ? descriptor_.mcu_family : "",
+        descriptor_.sdk_version ? descriptor_.sdk_version : "",
+        descriptor_.firmware_hash ? descriptor_.firmware_hash : "",
+        descriptor_.capabilities_hash ? descriptor_.capabilities_hash : ""
+    );
+    
+    crypto::sha256_hex(combined, strlen(combined), descriptor_.descriptor_hash.buf);
+    descriptor_.descriptor_hash.len = Sha256HexLen;
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -640,9 +645,8 @@ int64_t Core::next_sequence() {
 
 void Core::set_identity(const char* device_id, const char* secret_hex) {
     if (device_id) {
-        strncpy(device_id_, device_id, DeviceIdLen);
-        device_id_[DeviceIdLen] = '\0';
-        memcpy(val_ctx_.device_id, device_id_, DeviceIdLen + 1);
+        session_.device_id.set(device_id);
+        memcpy(val_ctx_.device_id, session_.device_id.c_str(), DeviceIdLen + 1);
     }
     if (secret_hex) {
         size_t dlen = 0;
@@ -698,8 +702,8 @@ Error Core::build_signed_json(
     /* Build canonical JSON for signature */
     MessageHeader hdr;
     hdr.version.set(VersionString);
-    hdr.device_id.set(device_id_);
-    hdr.tenant_id.set(tenant_id_);
+    hdr.device_id.set(session_.device_id.c_str());
+    hdr.tenant_id.set(session_.tenant_id.c_str());
     hdr.client_id.set(client_id_);
     hdr.message_id.set(msg_id);
     hdr.request_id.set(msg_id); // Default RID=MID for outbound
@@ -744,7 +748,7 @@ Error Core::build_signed_json(
         "\"version\":\"%s\""
         "}",
         client_id_,
-        device_id_,
+        session_.device_id.c_str(),
         msg_id,
         message_type,
         nonce,
@@ -753,7 +757,7 @@ Error Core::build_signed_json(
         msg_id,
         static_cast<long long>(seq),
         signature,
-        tenant_id_,
+        session_.tenant_id.c_str(),
         static_cast<long long>(ts),
         VersionString
     );
@@ -810,12 +814,17 @@ Error Core::build_hello(
     uint8_t* out, size_t out_cap, size_t* out_len,
     char* msg_id_out)
 {
-    /* HELLO payload includes firmware version and device type */
-    char body[256];
+    /* HELLO payload includes dynamic descriptor */
+    char body[512];
     int blen = snprintf(body, sizeof(body),
-        "{\"device_type\":\"%s\",\"firmware_version\":\"%s\"}",
-        config_->device_type ? config_->device_type : "esp32",
-        config_->firmware_version ? config_->firmware_version : "0.0.1"
+        "{\"platform\":\"%s\",\"board\":\"%s\",\"mcu\":\"%s\",\"sdk_version\":\"%s\",\"firmware_hash\":\"%s\",\"capabilities_hash\":\"%s\",\"descriptor_hash\":\"%s\"}",
+        descriptor_.platform_name ? descriptor_.platform_name : "",
+        descriptor_.board_name ? descriptor_.board_name : "",
+        descriptor_.mcu_family ? descriptor_.mcu_family : "",
+        descriptor_.sdk_version ? descriptor_.sdk_version : "",
+        descriptor_.firmware_hash ? descriptor_.firmware_hash : "",
+        descriptor_.capabilities_hash ? descriptor_.capabilities_hash : "",
+        descriptor_.descriptor_hash.c_str()
     );
     if (blen < 0) return Error::BUFFER_OVERFLOW;
 
@@ -916,16 +925,15 @@ Error Core::build_ack(
 
 bool Core::build_topic(
     const char* channel,
-    char* out, size_t out_cap)
-{
-    if (!channel || !out || out_cap == 0) return false;
+    char* out, size_t out_cap
+) {
+    if (!channel || !out) return false;
+    if (session_.tenant_id.empty() || session_.device_id.empty()) return false;
 
-    /* Format: hxtp/{tenantId}/device/{deviceId}/{channel} */
-    int written = snprintf(out, out_cap,
-        "hxtp/%s/device/%s/%s",
-        tenant_id_, device_id_, channel
-    );
-
+    int written = snprintf(out, out_cap, "hxtp/%s/device/%s/%s",
+                           session_.tenant_id.c_str(),
+                           session_.device_id.c_str(),
+                           channel);
     return (written > 0 && static_cast<size_t>(written) < out_cap);
 }
 
@@ -964,7 +972,7 @@ bool Core::generate_claim_token(char* out, size_t out_cap) {
     /* Canonical: device_id|pub_hex|nonce|timestamp|expiry */
     char canonical[256];
     int clen = snprintf(canonical, sizeof(canonical), "%s|%s|%s|%lld|%lld",
-        device_id_, ed25519_pub_hex_, nonce, (long long)ts, (long long)expiry);
+        ed25519_pub_hex_, ed25519_pub_hex_, nonce, (long long)ts, (long long)expiry);
 
     if (clen < 0 || (size_t)clen >= sizeof(canonical)) return false;
 

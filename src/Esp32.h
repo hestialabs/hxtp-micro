@@ -51,6 +51,19 @@ static int64_t esp32_get_epoch_ms() {
          + static_cast<int64_t>(tv.tv_usec / 1000);
 }
 
+/* ── Metadata ───────────────────────────────────────────────────────── */
+
+static void esp32_get_descriptor(RuntimeDescriptor* out) {
+    if (!out) return;
+    out->platform_name = "esp32";
+#ifdef ARDUINO_BOARD
+    out->board_name = ARDUINO_BOARD;
+#else
+    out->board_name = "esp32-generic";
+#endif
+    out->mcu_family = "xtensa-lx6"; /* or lx7 depending on specific chip */
+}
+
 /* ── Platform Crypto Adapter ────────────────────────────────────────── */
 
 inline PlatformCrypto create_esp32_crypto() {
@@ -58,6 +71,7 @@ inline PlatformCrypto create_esp32_crypto() {
     pc.random_bytes = esp32_random_bytes;
     pc.get_time_ms  = esp32_get_time_ms;
     pc.get_epoch_ms = esp32_get_epoch_ms;
+    pc.get_descriptor = esp32_get_descriptor;
     return pc;
 }
 

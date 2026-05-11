@@ -309,7 +309,7 @@ Error ed25519_keygen(
     uint8_t priv[Ed25519PrivKeyLen],
     bool (*rng)(uint8_t*, size_t)
 ) {
-    int ret = hxtp_crypto_sign_keypair(pub, priv, (int (*)(uint8_t*, size_t))rng);
+    int ret = hxtp_crypto_sign_keypair(pub, priv, rng);
     return (ret == 0) ? Error::OK : Error::KEYGEN_FAILED;
 }
 

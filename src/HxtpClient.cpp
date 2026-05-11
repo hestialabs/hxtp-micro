@@ -21,12 +21,12 @@ Client* Client::s_instance_ = nullptr;
 
 Client::Client(const Config& config)
     : config_(config)
-    , mqtt_port_(8883)
     , core_()
     , storage_adapter_({})
     , platform_crypto_({})
     , provisioning_(&core_, &storage_adapter_)
     , bootstrap_(&core_, &tls_client_)
+    , ota_(&core_, &tls_client_)
     , mqtt_client_(tls_client_)
 #ifdef ESP8266
     , x509_ca_(nullptr)
@@ -43,7 +43,6 @@ Client::Client(const Config& config)
 {
     memset(tx_buf_, 0, sizeof(tx_buf_));
     memset(ack_buf_, 0, sizeof(ack_buf_));
-    memset(mqtt_host_, 0, sizeof(mqtt_host_));
     s_instance_ = this;
 }
 
@@ -309,29 +308,37 @@ void Client::tick_time_syncing() {
 }
 
 void Client::tick_bootstrapping() {
-    /* Perform cloud discovery via signed HTTP request */
-    BootstrapConfig bcfg = bootstrap_.perform();
+    if (bootstrap_.perform()) {
+        SessionMetadata& sess = core_.session();
 
-    if (bcfg.success) {
-        snprintf(mqtt_host_, sizeof(mqtt_host_), "%s", bcfg.mqtt_host);
-        mqtt_port_ = bcfg.mqtt_port;
-        strncpy(mqtt_session_token_, bcfg.mqtt_session_token, sizeof(mqtt_session_token_) - 1);
-        session_expiry_ms_ = bcfg.session_expiry_ms;
-        
-        /* Update config for later use */
-        const_cast<Config*>(&config_)->heartbeat_interval_seconds = bcfg.heartbeat_interval_seconds;
+        /* Parse mqtts://host:port from sess.mqtt_endpoint */
+        char host[64] = {0};
+        uint16_t port = 8883;
 
-        mqtt_client_.setServer(mqtt_host_, mqtt_port_);
+        const char* endpoint = sess.mqtt_endpoint.c_str();
+        const char* host_start = strstr(endpoint, "://");
+        host_start = host_start ? host_start + 3 : endpoint;
         
-        if (bcfg.activation_state == DeviceActivationState::ACTIVE || 
-            bcfg.activation_state == DeviceActivationState::CLAIMED) 
+        const char* port_ptr = strchr(host_start, ':');
+        if (port_ptr) {
+            size_t hlen = port_ptr - host_start;
+            if (hlen >= sizeof(host)) hlen = sizeof(host) - 1;
+            memcpy(host, host_start, hlen);
+            port = static_cast<uint16_t>(atoi(port_ptr + 1));
+        } else {
+            strncpy(host, host_start, sizeof(host) - 1);
+        }
+
+        mqtt_client_.setServer(host, port);
+        
+        if (sess.activation_state == DeviceActivationState::ACTIVE || 
+            sess.activation_state == DeviceActivationState::CLAIMED) 
         {
             set_state(ClientState::MQTT_LINKING);
             Serial.print("[HXTP] Bootstrap success (");
-            Serial.print(bcfg.activation_state == DeviceActivationState::ACTIVE ? "ACTIVE" : "CLAIMED");
-            Serial.print("). Broker: ");
-            Serial.println(mqtt_host_);
-        } else if (bcfg.activation_state == DeviceActivationState::PENDING_CLAIM) {
+            Serial.print(sess.activation_state == DeviceActivationState::ACTIVE ? "ACTIVE" : "CLAIMED");
+            Serial.printf("). Broker: %s:%d\n", host, port);
+        } else if (sess.activation_state == DeviceActivationState::PENDING_CLAIM) {
             set_state(ClientState::PENDING_CLAIM);
             Serial.println("[HXTP] Bootstrap success (PENDING_CLAIM). Waiting for owner...");
         } else {
@@ -350,11 +357,13 @@ void Client::tick_mqtt_connecting() {
     }
 
     /* Build MQTT client ID */
-    char mqtt_cid[48];
-    snprintf(mqtt_cid, sizeof(mqtt_cid), "hxtp-%s", core_.device_id());
+    char mqtt_cid[64];
+    snprintf(mqtt_cid, sizeof(mqtt_cid), "hxtp-%s", core_.session().device_id.c_str());
 
     /* Use short-lived session token as MQTT password */
-    bool ok = mqtt_client_.connect(mqtt_cid, core_.device_id(), mqtt_session_token_);
+    bool ok = mqtt_client_.connect(mqtt_cid, 
+                                  core_.session().device_id.c_str(), 
+                                  core_.session().mqtt_session_token.c_str());
 
     if (ok) {
         reconnect_delay_ms_ = 1000; /* Reset backoff on success */
@@ -398,17 +407,6 @@ void Client::tick_hello() {
 }
 
 void Client::tick_ready() {
-    /* Check MQTT Session Expiry */
-    if (session_expiry_ms_ > 0) {
-        int64_t now_ms = platform_crypto_.get_epoch_ms();
-        if (now_ms >= session_expiry_ms_) {
-            Serial.println("[HXTP] MQTT session token expired. Re-bootstrapping...");
-            mqtt_client_.disconnect();
-            set_state(ClientState::BOOTSTRAPPING);
-            return;
-        }
-    }
-
     /* MQTT keepalive */
     if (!mqtt_client_.loop()) {
         /* Connection lost */
@@ -424,12 +422,17 @@ void Client::tick_ready() {
 
     /* Heartbeat timer */
     uint32_t now = millis();
-    uint32_t hb_interval = config_.heartbeat_interval_seconds * 1000;
+    uint32_t hb_interval = core_.session().heartbeat_interval_seconds * 1000;
     if (hb_interval == 0) hb_interval = HeartbeatIntervalSec * 1000;
 
     if (now - last_heartbeat_ms_ >= hb_interval) {
         send_heartbeat();
         last_heartbeat_ms_ = now;
+
+        /* Check for OTA updates after heartbeat if signaled */
+        if (core_.session().update_available) {
+            ota_.check_and_update();
+        }
     }
 }
 

@@ -49,12 +49,12 @@ hxtp::CapabilityResult handleSetMode(const char* params, uint32_t len, void* use
 void setup() {
     Serial.begin(115200);
     delay(1000);
-    Serial.println("\n--- hxtp-micro Advanced Hub Starting ---");
+    Serial.println("\n--- hxtp-micro Multi-Capability Device Starting ---");
 
     hxtp::Config config;
-    config.device_type      = "advanced-hub";
-    config.firmware_version = "1.0.3";
-    config.verify_server    = true; 
+    config.device_uuid   = "00000000-0000-0000-0000-000000000000"; 
+    config.api_key       = "api_key_here";
+    config.verify_server = true; 
 
     hxtpClient = new hxtp::Client(config);
 

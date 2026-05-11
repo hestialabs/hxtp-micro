@@ -230,11 +230,25 @@ inline StorageAdapter create_eeprom_adapter() {
     return adapter;
 }
 
+/* ── Metadata ───────────────────────────────────────────────────────── */
+
+static void esp8266_get_descriptor(RuntimeDescriptor* out) {
+    if (!out) return;
+    out->platform_name = "esp8266";
+#ifdef ARDUINO_BOARD
+    out->board_name = ARDUINO_BOARD;
+#else
+    out->board_name = "esp8266-generic";
+#endif
+    out->mcu_family = "lx106";
+}
+
 inline PlatformCrypto create_esp8266_crypto() {
     PlatformCrypto pc;
     pc.random_bytes = esp8266_random_bytes;
     pc.get_time_ms  = esp8266_get_time_ms;
     pc.get_epoch_ms = esp8266_get_epoch_ms;
+    pc.get_descriptor = esp8266_get_descriptor;
     return pc;
 }
 

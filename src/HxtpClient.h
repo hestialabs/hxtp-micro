@@ -49,6 +49,7 @@
 
 #include "Provisioning.h"
 #include "Bootstrap.h"
+#include "OTA.h"
 
 namespace hxtp {
 
@@ -185,10 +186,7 @@ private:
     Config  config_;
 
     /* ── Fetched Bootstrapped Config ─────────────────── */
-    char        mqtt_host_[64];
-    uint16_t    mqtt_port_;
-    char        mqtt_session_token_[256];
-    int64_t     session_expiry_ms_;
+    /* Dynamic state is now held in core_.session() */
     
     /* ── Core Engine ─────────────────────────────────── */
     Core    core_;
@@ -197,9 +195,10 @@ private:
     StorageAdapter   storage_adapter_;
     PlatformCrypto   platform_crypto_;
 
-    /* ── Provisioning & Bootstrap ────────────────────── */
+    /* ── Provisioning, Bootstrap & OTA ───────────────── */
     Provisioning         provisioning_;
     Bootstrap            bootstrap_;
+    OtaManager           ota_;
 
     /* ── Network ─────────────────────────────────────── */
 #ifdef ESP8266

@@ -28,16 +28,6 @@
 
 namespace hxtp {
 
-struct BootstrapConfig {
-    char mqtt_host[64];
-    uint16_t mqtt_port;
-    char mqtt_session_token[256];
-    int64_t session_expiry_ms;
-    uint32_t heartbeat_interval_seconds;
-    DeviceActivationState activation_state;
-    bool success;
-};
-
 class Bootstrap {
 public:
     Bootstrap(Core* core, WiFiClientSecure* tls_client);
@@ -45,9 +35,9 @@ public:
     /**
      * Perform the cloud bootstrap request.
      * @param api_url  Optional override for bootstrap endpoint
-     * @return         Populated config on success
+     * @return         true if success, session is populated in Core
      */
-    BootstrapConfig perform(const char* api_url = nullptr);
+    bool perform(const char* api_url = nullptr);
 
 private:
     Core* core_;

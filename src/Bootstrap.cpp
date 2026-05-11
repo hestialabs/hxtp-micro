@@ -17,22 +17,14 @@ Bootstrap::Bootstrap(Core* core, WiFiClientSecure* tls_client)
 {
 }
 
-BootstrapConfig Bootstrap::perform(const char* api_url) {
-    BootstrapConfig config;
-    memset(&config, 0, sizeof(config));
-    config.mqtt_port = 8883;
-    config.heartbeat_interval_seconds = 30;
-    config.success = false;
-
-    if (!core_ || !core_->is_initialized() || !core_->is_secret_loaded()) {
-        return config;
-    }
+bool Bootstrap::perform(const char* api_url) {
+    if (!core_ || !core_->is_initialized()) return false;
 
     const char* base_url = api_url ? api_url : core_->config()->api_base_url;
-    if (!base_url) return config;
+    if (!base_url) return false;
 
     char url[256];
-    snprintf(url, sizeof(url), "%s/api/v1/devices/%s/bootstrap", base_url, core_->device_id());
+    snprintf(url, sizeof(url), "%s/api/v1/devices/%s/bootstrap", base_url, core_->config()->device_uuid);
 
     /* ── Prepare Headers (HMAC Signing) ──────────────────── */
     char nonce[MaxNonceLen + 1];
@@ -51,8 +43,8 @@ BootstrapConfig Bootstrap::perform(const char* api_url) {
     char canonical[512];
     snprintf(canonical, sizeof(canonical), "%s|%s|%s|%s|%s|%s|-1|%lld|%s|bootstrap|e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
              VersionString,
-             core_->device_id(),
-             core_->tenant_id(),
+             core_->config()->device_uuid, /* ID is UUID during bootstrap */
+             "00000000-0000-0000-0000-000000000000", /* Tenant unknown yet */
              core_->client_id(),
              msg_id,
              msg_id,
@@ -60,7 +52,15 @@ BootstrapConfig Bootstrap::perform(const char* api_url) {
              nonce);
 
     char signature[HmacHexLen + 1];
-    crypto::hmac_sha256_hex(core_->device_secret(), SecretLen,
+    const char* cred = core_->is_secret_loaded() ? (const char*)core_->device_secret() : core_->config()->api_key;
+    size_t cred_len = core_->is_secret_loaded() ? SecretLen : (cred ? strlen(cred) : 0);
+
+    if (!cred) {
+        Serial.println("[HXTP] ERROR: No credentials available for bootstrap");
+        return false;
+    }
+
+    crypto::hmac_sha256_hex((const uint8_t*)cred, cred_len,
                             canonical, strlen(canonical), signature);
 
     /* Execute HTTP Request */
@@ -69,7 +69,7 @@ BootstrapConfig Bootstrap::perform(const char* api_url) {
     BearSSL::X509List* tmp_x509 = nullptr;
 #endif
 
-    /* Load Root CA if available */
+    /* Load Root CA */
     char ca_cert[4096];
     if (core_->storage() && core_->storage()->read_ca_cert && core_->storage()->read_ca_cert(ca_cert, sizeof(ca_cert))) {
 #ifdef ESP32
@@ -86,11 +86,9 @@ BootstrapConfig Bootstrap::perform(const char* api_url) {
         tls_client_->setTrustAnchors(tmp_x509);
 #endif
     } else if (core_->config()->verify_server) {
-        /* If verify requested but no cert found, fail closed */
         Serial.println("[HXTP] ERROR: TLS verification requested but no CA cert found.");
-        return config;
+        return false;
     } else {
-        /* Insecure mode allowed only if explicitly disabled in config */
         tls_client_->setInsecure();
     }
 
@@ -102,78 +100,50 @@ BootstrapConfig Bootstrap::perform(const char* api_url) {
     http.addHeader("X-HXTP-Signature", signature);
 
     int code = http.GET();
+    bool success = false;
     if (code == HTTP_CODE_OK) {
         String body = http.getString();
         const char* json = body.c_str();
         size_t jlen = body.length();
 
-        /* ── Parse Response (Zero-Allocation) ─────────────── */
-        char state_str[32];
-        char endpoint[128];
+        SessionMetadata& sess = core_->session();
+        char buf[256];
 
-        config.activation_state = DeviceActivationState::BOOTSTRAP;
-
-        /* Activation State Mapping */
-        if (json_get_string(json, jlen, "activation_state", state_str, sizeof(state_str), nullptr)) {
-            if (strcmp(state_str, "active") == 0) {
-                config.activation_state = DeviceActivationState::ACTIVE;
-                config.success = true;
-            } else if (strcmp(state_str, "claimed") == 0) {
-                config.activation_state = DeviceActivationState::CLAIMED;
-                config.success = true;
-            } else if (strcmp(state_str, "pending_claim") == 0) {
-                config.activation_state = DeviceActivationState::PENDING_CLAIM;
-                config.success = true; 
-            } else if (strcmp(state_str, "revoked") == 0) {
-                config.activation_state = DeviceActivationState::REVOKED;
-                Serial.println("[HXTP] DEVICE REVOKED BY CLOUD");
-                config.success = false;
-                return config;
-            }
+        /* 1. Activation State */
+        if (json_get_string(json, jlen, "activation_state", buf, sizeof(buf), nullptr)) {
+            if (strcmp(buf, "active") == 0) sess.activation_state = DeviceActivationState::ACTIVE;
+            else if (strcmp(buf, "claimed") == 0) sess.activation_state = DeviceActivationState::CLAIMED;
+            else if (strcmp(buf, "pending_claim") == 0) sess.activation_state = DeviceActivationState::PENDING_CLAIM;
+            else if (strcmp(buf, "revoked") == 0) sess.activation_state = DeviceActivationState::REVOKED;
         }
 
-        /* 2. MQTT Endpoint */
-        if (json_get_string(json, jlen, "mqtt_endpoint", endpoint, sizeof(endpoint), nullptr)) {
-            // Parse mqtts://host:port
-            const char* host_start = strstr(endpoint, "://");
-            host_start = host_start ? host_start + 3 : endpoint;
-            
-            const char* port_ptr = strchr(host_start, ':');
-            if (port_ptr) {
-                size_t host_len = port_ptr - host_start;
-                if (host_len < sizeof(config.mqtt_host)) {
-                    memcpy(config.mqtt_host, host_start, host_len);
-                    config.mqtt_host[host_len] = '\0';
-                }
-                config.mqtt_port = (uint16_t)atoi(port_ptr + 1);
-            } else {
-                strncpy(config.mqtt_host, host_start, sizeof(config.mqtt_host) - 1);
-            }
-        }
+        /* 2. Device/Tenant Identity */
+        if (json_get_string(json, jlen, "device_id", buf, sizeof(buf), nullptr)) sess.device_id.set(buf);
+        if (json_get_string(json, jlen, "tenant_id", buf, sizeof(buf), nullptr)) sess.tenant_id.set(buf);
 
-        /* 3. MQTT Session Token */
-        if (json_get_string(json, jlen, "mqtt_session_token", config.mqtt_session_token, sizeof(config.mqtt_session_token), nullptr)) {
-            char exp_buf[32];
-            if (json_get_string(json, jlen, "session_expiry", exp_buf, sizeof(exp_buf), nullptr)) {
-                config.session_expiry_ms = (int64_t)atoll(exp_buf);
-            }
-        }
+        /* 3. MQTT Endpoint & Token */
+        if (json_get_string(json, jlen, "mqtt_endpoint", buf, sizeof(buf), nullptr)) sess.mqtt_endpoint.set(buf);
+        if (json_get_string(json, jlen, "mqtt_session_token", buf, sizeof(buf), nullptr)) sess.mqtt_session_token.set(buf);
 
+        /* 4. Heartbeat */
         int64_t hb = 30;
-        if (json_get_int64(json, jlen, "heartbeat_interval", &hb)) {
-            config.heartbeat_interval_seconds = (uint32_t)hb;
-        }
+        if (json_get_int64(json, jlen, "heartbeat_interval", &hb)) sess.heartbeat_interval_seconds = (uint32_t)hb;
 
-        config.success = true;
+        /* 5. OTA Metadata */
+        if (json_get_string(json, jlen, "ota_manifest_url", buf, sizeof(buf), nullptr)) sess.ota_manifest_url.set(buf);
+        if (json_get_string(json, jlen, "ota_signature", buf, sizeof(buf), nullptr)) sess.ota_signature.set(buf);
+        if (json_get_string(json, jlen, "latest_firmware", buf, sizeof(buf), nullptr)) sess.latest_firmware_version.set(buf);
+        json_get_bool(json, jlen, "update_available", &sess.update_available);
+
+        success = true;
     }
 
     http.end();
 #ifdef ESP8266
-    /* Cleanup temporary trust anchor */
     tls_client_->setTrustAnchors(nullptr);
     if (tmp_x509) delete tmp_x509;
 #endif
-    return config;
+    return success;
 }
 
 } /* namespace hxtp */
