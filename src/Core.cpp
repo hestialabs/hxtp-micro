@@ -642,17 +642,24 @@ int64_t Core::next_sequence() {
     return outbound_sequence_;
 }
 
-void Core::set_identity(const char* device_id, const char* secret_hex) {
+void Core::set_identity(const char* device_id, const char* priv_hex, const char* pub_hex) {
     if (device_id) {
         session_.device_id.set(device_id);
         memcpy(val_ctx_.device_id, session_.device_id.c_str(), DeviceIdLen + 1);
     }
-    if (secret_hex) {
+    if (priv_hex) {
         size_t dlen = 0;
-        if (crypto::hex_decode(secret_hex, strlen(secret_hex), device_secret_, &dlen) && dlen == SecretLen) {
-            secret_loaded_ = true;
-            memcpy(val_ctx_.device_secret, device_secret_, SecretLen);
-            val_ctx_.secret_loaded = true;
+        if (crypto::hex_decode(priv_hex, strlen(priv_hex), ed25519_priv_, &dlen) && dlen == Ed25519PrivKeyLen) {
+            memcpy(val_ctx_.device_priv_key, ed25519_priv_, Ed25519PrivKeyLen);
+        }
+    }
+    if (pub_hex) {
+        size_t dlen = 0;
+        if (crypto::hex_decode(pub_hex, strlen(pub_hex), ed25519_pub_, &dlen) && dlen == Ed25519PubKeyLen) {
+            memcpy(val_ctx_.device_pub_key, ed25519_pub_, Ed25519PubKeyLen);
+            crypto::hex_encode(ed25519_pub_, Ed25519PubKeyLen, ed25519_pub_hex_);
+            val_ctx_.identity_loaded = true;
+            identity_generated_ = true;
         }
     }
 }

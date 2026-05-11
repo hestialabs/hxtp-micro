@@ -215,7 +215,7 @@ public:
     const char*         ed25519_pub_hex() const { return ed25519_pub_hex_; }
     Error               ed25519_sign(const uint8_t* msg, size_t len, uint8_t sig[Ed25519SigLen]);
     bool                generate_claim_token(char* out, size_t out_cap);
-    void                set_identity(const char* device_id, const char* secret_hex);
+    void                set_identity(const char* device_id, const char* priv_hex, const char* pub_hex);
     const uint8_t*      device_secret() const { return device_secret_; }
     const StorageAdapter* storage() const { return storage_; }
     const Config*       config() const { return config_; }

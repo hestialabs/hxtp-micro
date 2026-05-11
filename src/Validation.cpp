@@ -336,7 +336,7 @@ ValidationResult validate_sequence(
     return ValidationResult::ok();
 }
 
-/* ── Step 7: HMAC-SHA256 Signature ───────────────────────────────── */
+/* ── Step 7: Ed25519 Signature ───────────────────────────────────── */
 
 ValidationResult validate_signature(
     const InboundFrame* frame,
@@ -369,7 +369,7 @@ ValidationResult validate_signature(
     /* Decode hex signature to binary (128 hex chars -> 64 bytes) */
     uint8_t sig_bin[Ed25519SigLen];
     size_t sig_bin_len = 0;
-    if (!crypto::hex_decode(frame->header.signature.c_str(), frame->header.signature.length(), sig_bin, &sig_bin_len) || sig_bin_len != Ed25519SigLen) {
+    if (!crypto::hex_decode(frame->header.signature.c_str(), frame->header.signature.len, sig_bin, &sig_bin_len) || sig_bin_len != Ed25519SigLen) {
         return ValidationResult::fail(
             ValidationStep::SignatureCheck,
             "SIGNATURE_DECODE_FAILED: invalid hex signature"
