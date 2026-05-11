@@ -1,4 +1,4 @@
-# 🛡️ HxTP-micro
+# hxtp-micro
 
 [![Version](https://img.shields.io/badge/version-1.0.3-blue.svg)](https://github.com/hestialabs/hxtp-micro)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.txt)
@@ -30,10 +30,12 @@ Add the following to your `platformio.ini`:
 platform = espressif32
 board = esp32dev
 framework = arduino
+
 lib_deps =
     hxtp-micro@^1.0.3
     knolleary/PubSubClient@^2.8
     bblanchon/ArduinoJson@^7.0.0
+
 build_flags =
     -std=gnu++17
     -DHXTP_RELEASE=1
@@ -47,20 +49,24 @@ The SDK handles identity generation and claiming automatically.
 
 hxtp::Client* client = nullptr;
 
-// 1. Define a capability handler
-hxtp::CapabilityResult toggle_led(const char* params, uint32_t len, void* ctx) {
-    // Logic to toggle LED...
-    return { true, 0, "" }; // success, error_code, error_msg
+hxtp::CapabilityResult toggle_led(
+    const char* params,
+    uint32_t len,
+    void* ctx
+) {
+    // Device logic
+
+    return { true, 0, "" };
 }
 
 void setup() {
     Serial.begin(115200);
 
     hxtp::Config config;
+
     config.wifi_ssid     = "Your-SSID";
     config.wifi_password = "Your-Password";
-    
-    // Auth & Provisioning
+
     config.api_base_url  = "https://api.hestialabs.in/v1";
     config.device_uuid   = "permanent-hardware-id";
     config.api_key       = "your-portal-api-key";
@@ -99,9 +105,8 @@ The SDK implements a hardened **7-step validation pipeline** for every inbound m
 
 ---
 
-## 📄 License
+# License
 
-This project is licensed under the **MIT License**. See [LICENSE.txt](LICENSE.txt) for details.
+This project is licensed under the MIT License. See `LICENSE.txt` for details.
 
-Copyright © 2026 **Hestia Labs**
-
+Copyright © 2026 Hestia Labs
