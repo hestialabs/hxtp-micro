@@ -202,6 +202,39 @@ Error ed25519_sign(
     uint8_t sig[Ed25519SigLen]
 );
 
+/**
+ * Verify an Ed25519 signature.
+ * @param msg       Message data
+ * @param len       Message length
+ * @param pub       Public key (32 bytes)
+ * @param sig       Signature (64 bytes)
+ * @return          Error::OK or SIGNATURE_INVALID
+ */
+Error ed25519_verify(
+    const uint8_t* msg, size_t len,
+    const uint8_t pub[Ed25519PubKeyLen],
+    const uint8_t sig[Ed25519SigLen]
+);
+
+/**
+ * Sign a message and produce hex signature.
+ */
+Error ed25519_sign_hex(
+    const char* msg, size_t len,
+    const uint8_t priv[Ed25519PrivKeyLen],
+    const uint8_t pub[Ed25519PubKeyLen],
+    char sig_hex[Ed25519SigHexLen + 1]
+);
+
+/**
+ * Verify a hex signature.
+ */
+Error ed25519_verify_hex(
+    const char* msg, size_t len,
+    const uint8_t pub[Ed25519PubKeyLen],
+    const char sig_hex[Ed25519SigHexLen + 1]
+);
+
 } /* namespace crypto */
 } /* namespace hxtp */
 

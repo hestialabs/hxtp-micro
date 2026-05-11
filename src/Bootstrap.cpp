@@ -51,17 +51,30 @@ bool Bootstrap::perform(const char* api_url) {
              (long long)timestamp,
              nonce);
 
-    char signature[HmacHexLen + 1];
-    const char* cred = core_->is_secret_loaded() ? (const char*)core_->device_secret() : core_->config()->api_key;
-    size_t cred_len = core_->is_secret_loaded() ? SecretLen : (cred ? strlen(cred) : 0);
+    char signature[Ed25519SigHexLen + 1];
+    bool use_ed25519 = core_->validation_ctx().identity_loaded;
 
-    if (!cred) {
-        Serial.println("[HXTP] ERROR: No credentials available for bootstrap");
-        return false;
+    if (use_ed25519) {
+        /* Ed25519 signing (Preferred) */
+        uint8_t sig_bin[Ed25519SigLen];
+        Error err = crypto::ed25519_sign(
+            reinterpret_cast<const uint8_t*>(canonical), strlen(canonical),
+            core_->validation_ctx().device_priv_key,
+            core_->validation_ctx().device_pub_key,
+            sig_bin
+        );
+        if (err != Error::OK) return false;
+        crypto::hex_encode(sig_bin, Ed25519SigLen, signature);
+    } else {
+        /* HMAC fallback (Initial bootstrap with API Key) */
+        const char* cred = core_->config()->api_key;
+        if (!cred) {
+            Serial.println("[HXTP] ERROR: No credentials available for bootstrap");
+            return false;
+        }
+        crypto::hmac_sha256_hex((const uint8_t*)cred, strlen(cred),
+                                canonical, strlen(canonical), signature);
     }
-
-    crypto::hmac_sha256_hex((const uint8_t*)cred, cred_len,
-                            canonical, strlen(canonical), signature);
 
     /* Execute HTTP Request */
     HTTPClient http;
@@ -98,6 +111,9 @@ bool Bootstrap::perform(const char* api_url) {
     http.addHeader("X-HXTP-Nonce", nonce);
     http.addHeader("X-HXTP-Message-ID", msg_id);
     http.addHeader("X-HXTP-Signature", signature);
+    if (use_ed25519) {
+        http.addHeader("X-HXTP-Public-Key", core_->ed25519_pub_hex());
+    }
 
     int code = http.GET();
     bool success = false;

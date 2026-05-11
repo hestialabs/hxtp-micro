@@ -358,16 +358,16 @@ Error Core::init(
     /* Generate descriptor hash for attestation */
     calculate_descriptor_hash();
 
-    /* ── Client ID ─────────────────────────────────── */
-    /* Generate a UUID v4 for this session */
-    Error err = crypto::generate_uuid_v4(client_id_, platform_->random_bytes);
-    if (err != Error::OK) return err;
+    /* ── Identity (Ed25519) ────────────────────────── */
+    if (!ensure_identity()) return Error::KEYGEN_FAILED;
 
-    /* ── Device Secret ─────────────────────────────── */
-    /* Secret is now typically delivered via bootstrap, but check storage */
-    if (storage_ && storage_->read_secret) {
-        if (storage_->read_secret(device_secret_, SecretLen)) {
-            secret_loaded_ = true;
+    /* ── Cloud Root Key ────────────────────────────── */
+    if (config_ && config_->cloud_root_key) {
+        size_t klen = 0;
+        if (crypto::hex_decode(config_->cloud_root_key, strlen(config_->cloud_root_key), val_ctx_.cloud_root_pub_key, &klen)) {
+            if (klen == Ed25519PubKeyLen) {
+                val_ctx_.cloud_root_loaded = true;
+            }
         }
     }
 
@@ -383,11 +383,10 @@ Error Core::init(
     val_ctx_.init();
     val_ctx_.get_epoch_ms = platform_->get_epoch_ms;
     
-    /* Validation identity will be updated after bootstrap */
-    if (secret_loaded_) {
-        memcpy(val_ctx_.device_secret, device_secret_, SecretLen);
-        val_ctx_.secret_loaded = true;
-    }
+    /* Device identity for signing/telemetry */
+    memcpy(val_ctx_.device_priv_key, ed25519_priv_, Ed25519PrivKeyLen);
+    memcpy(val_ctx_.device_pub_key, ed25519_pub_, Ed25519PubKeyLen);
+    val_ctx_.identity_loaded = true;
 
     initialized_ = true;
     return Error::OK;
@@ -719,47 +718,48 @@ Error Core::build_signed_json(
         return Error::BUFFER_OVERFLOW;
     }
 
-    /* Compute HMAC-SHA256 signature */
-    char signature[HmacHexLen + 1];
-    if (!secret_loaded_) return Error::SECRET_NOT_FOUND;
-
-    err = crypto::hmac_sha256_hex(
-        device_secret_, SecretLen,
-        canonical, canonical_len,
-        signature
+    /* Compute Ed25519 signature */
+    uint8_t sig_bin[Ed25519SigLen];
+    err = crypto::ed25519_sign(
+        reinterpret_cast<const uint8_t*>(canonical), canonical_len,
+        ed25519_priv_, ed25519_pub_,
+        sig_bin
     );
     if (err != Error::OK) return err;
 
-    /* Build full outbound JSON () */
+    char signature[Ed25519SigHexLen + 1];
+    crypto::hex_encode(sig_bin, Ed25519SigLen, signature);
+
+    /* Build full outbound JSON (HxTP/3.1) */
     int written = snprintf(json_out, json_cap,
         "{"
-        "\"client_id\":\"%s\","
+        "\"version\":\"%s\","
         "\"device_id\":\"%s\","
+        "\"tenant_id\":\"%s\","
+        "\"client_id\":\"%s\","
         "\"message_id\":\"%s\","
-        "\"message_type\":\"%s\","
-        "\"nonce\":\"%s\","
-        "\"params\":%.*s,"
-        "\"payload_hash\":\"%s\","
         "\"request_id\":\"%s\","
         "\"sequence_number\":%lld,"
-        "\"signature\":\"%s\","
-        "\"tenant_id\":\"%s\","
         "\"timestamp\":%lld,"
-        "\"version\":\"%s\""
+        "\"nonce\":\"%s\","
+        "\"message_type\":\"%s\","
+        "\"payload_hash\":\"%s\","
+        "\"params\":%.*s,"
+        "\"signature\":\"%s\""
         "}",
-        client_id_,
+        VersionString,
         session_.device_id.c_str(),
+        session_.tenant_id.c_str(),
+        client_id_,
         msg_id,
-        message_type,
-        nonce,
-        static_cast<int>(hash_input_len), hash_input,
-        payload_hash,
         msg_id,
         static_cast<long long>(seq),
-        signature,
-        session_.tenant_id.c_str(),
         static_cast<long long>(ts),
-        VersionString
+        nonce,
+        message_type,
+        payload_hash,
+        static_cast<int>(hash_input_len), hash_input,
+        signature
     );
 
     if (written < 0 || static_cast<size_t>(written) >= json_cap) return Error::BUFFER_OVERFLOW;

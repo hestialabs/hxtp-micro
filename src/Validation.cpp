@@ -9,7 +9,7 @@
  *   4. Nonce uniqueness
  *   5. Payload hash verification
  *   6. Sequence monotonicity
- *   7. HMAC-SHA256 signature verification
+ *   7. Ed25519 signature verification (constant-time)
  *
  * Copyright (c) 2026 Hestia Labs
  * SDK-License-Identifier: MIT
@@ -90,10 +90,11 @@ bool SequenceTracker::check_and_advance(int64_t seq) {
  * ════════════════════════════════════════════════════════════════════ */
 
 void ValidationContext::init() {
-    memset(device_secret, 0, sizeof(device_secret));
-    secret_loaded = false;
-    memset(prev_secret, 0, sizeof(prev_secret));
-    prev_secret_loaded = false;
+    memset(device_priv_key, 0, sizeof(device_priv_key));
+    memset(device_pub_key, 0, sizeof(device_pub_key));
+    identity_loaded = false;
+    memset(cloud_root_pub_key, 0, sizeof(cloud_root_pub_key));
+    cloud_root_loaded = false;
     nonce_cache.init();
     sequence.init();
     get_epoch_ms = nullptr;
@@ -339,13 +340,19 @@ ValidationResult validate_sequence(
 
 ValidationResult validate_signature(
     const InboundFrame* frame,
-    const uint8_t* secret, size_t secret_len,
-    const uint8_t* prev_secret, bool has_prev)
+    const uint8_t* pub_key, size_t pub_key_len)
 {
     if (frame->header.signature.empty()) {
         return ValidationResult::fail(
             ValidationStep::SignatureCheck,
             "SIGNATURE_MISSING: signature field is empty"
+        );
+    }
+
+    if (!pub_key || pub_key_len != Ed25519PubKeyLen) {
+        return ValidationResult::fail(
+            ValidationStep::SignatureCheck,
+            "CRYPTO_ERROR: invalid public key for verification"
         );
     }
 
@@ -359,53 +366,29 @@ ValidationResult validate_signature(
         );
     }
 
-    /* Compute HMAC-SHA256 with primary secret */
-    char computed_hex[HmacHexLen + 1];
-    Error err = crypto::hmac_sha256_hex(
-        secret, secret_len,
-        canonical, canonical_len,
-        computed_hex
-    );
-    if (err != Error::OK) {
+    /* Decode hex signature to binary (128 hex chars -> 64 bytes) */
+    uint8_t sig_bin[Ed25519SigLen];
+    size_t sig_bin_len = 0;
+    if (!crypto::hex_decode(frame->header.signature.c_str(), frame->header.signature.length(), sig_bin, &sig_bin_len) || sig_bin_len != Ed25519SigLen) {
         return ValidationResult::fail(
             ValidationStep::SignatureCheck,
-            "HMAC_COMPUTE_FAILED: could not compute HMAC"
+            "SIGNATURE_DECODE_FAILED: invalid hex signature"
         );
     }
 
-    /* Constant-time compare */
-    if (crypto::constant_time_hex_equal(computed_hex, frame->header.signature.c_str(), HmacHexLen)) {
+    /* Verify Ed25519 signature */
+    Error err = crypto::ed25519_verify(
+        reinterpret_cast<const uint8_t*>(canonical), canonical_len,
+        pub_key, sig_bin
+    );
+
+    if (err == Error::OK) {
         return ValidationResult::ok();
     }
 
-    /* ── Fallback: try previous secret (key rotation window) ─────── */
-    if (has_prev && prev_secret) {
-        err = crypto::hmac_sha256_hex(
-            prev_secret, secret_len,
-            canonical, canonical_len,
-            computed_hex
-        );
-        if (err != Error::OK) {
-            return ValidationResult::fail(
-                ValidationStep::SignatureCheck,
-                "HMAC_COMPUTE_FAILED: previous secret HMAC failed"
-            );
-        }
-
-        if (crypto::constant_time_hex_equal(
-                computed_hex,
-                frame->header.signature.c_str(),
-                HmacHexLen))
-        {
-            /* Verified with previous secret — rotation in progress */
-            return ValidationResult::ok();
-        }
-    }
-
-    /* Both secrets failed */
     return ValidationResult::fail(
         ValidationStep::SignatureCheck,
-        "SIGNATURE_INVALID: HMAC verification failed"
+        "SIGNATURE_INVALID: Ed25519 verification failed"
     );
 }
 
@@ -456,18 +439,17 @@ ValidationResult validate_message(
     r = validate_sequence(frame, &ctx->sequence);
     if (!r.passed) return r;
 
-    /* ── Step 7: HMAC Signature ───────────────────────── */
-    if (!ctx->secret_loaded) {
+    /* ── Step 7: Ed25519 Signature ───────────────────── */
+    if (!ctx->cloud_root_loaded) {
         return ValidationResult::fail(
             ValidationStep::SignatureCheck,
-            "SECRET_NOT_LOADED: device secret unavailable"
+            "CLOUD_ROOT_NOT_LOADED: verification key unavailable"
         );
     }
 
     r = validate_signature(
         frame,
-        ctx->device_secret, SecretLen,
-        ctx->prev_secret, ctx->prev_secret_loaded
+        ctx->cloud_root_pub_key, Ed25519PubKeyLen
     );
 
     return r;

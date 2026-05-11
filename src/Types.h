@@ -59,6 +59,7 @@ static constexpr size_t   AesKeyLen           = 32;
 static constexpr size_t   Ed25519PubKeyLen    = 32;
 static constexpr size_t   Ed25519PrivKeyLen   = 32; /* Seed */
 static constexpr size_t   Ed25519SigLen       = 64;
+static constexpr size_t   Ed25519SigHexLen    = 128;
 
 /* ── Replay Policy & Timing (HARDENED) ───────────────────────────────── */
 
@@ -202,7 +203,7 @@ struct MessageHeader {
     FixedStr<MaxNonceLen>      nonce;
     FixedStr<16>                 message_type;
     FixedStr<Sha256HexLen>     payload_hash;
-    FixedStr<HmacHexLen>       signature;
+    FixedStr<Ed25519SigHexLen> signature;
     FixedStr<32>                 capability;
     FixedStr<32>                 action;
 };
@@ -337,6 +338,7 @@ struct Config {
     const char*  api_base_url;    /* e.g. "https://dash.hestialabs.in/api/v1" */
     const char*  device_uuid;      /* Permanent hardware/runtime identity */
     const char*  api_key;          /* Initial bootstrap / session issuance token */
+    const char*  cloud_root_key;   /* Ed25519 Public Key (Hex) */
     
     /* TLS */
     const char*  ca_cert;         /* PEM root CA (required in release builds) */
@@ -349,6 +351,7 @@ struct Config {
     Config() :
         wifi_ssid(nullptr), wifi_password(nullptr),
         api_base_url(nullptr), device_uuid(nullptr), api_key(nullptr),
+        cloud_root_key(nullptr),
         ca_cert(nullptr), verify_server(true),
         frame_buf_size(FrameBufDefault),
         max_reconnect_delay_ms(60000)

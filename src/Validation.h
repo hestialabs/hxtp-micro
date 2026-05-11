@@ -9,7 +9,7 @@
  *   4. Nonce uniqueness (ring buffer)
  *   5. Payload SHA-256 verification
  *   6. Sequence monotonicity
- *   7. HMAC-SHA256 signature verification (constant-time)
+ *   7. Ed25519 signature verification (constant-time)
  *
  * ANY failure → reject immediately. No fallback. No soft-fail.
  *
@@ -69,13 +69,14 @@ struct SequenceTracker {
 /* ── Validation Context (all state needed for pipeline) ─────────────── */
 
 struct ValidationContext {
-    /* Device secret (binary, 32 bytes) — loaded from NVS */
-    uint8_t  device_secret[SecretLen];
-    bool     secret_loaded;
+    /* Device Ed25519 Identity (32-byte seed + 32-byte public key) */
+    uint8_t  device_priv_key[Ed25519PrivKeyLen];
+    uint8_t  device_pub_key[Ed25519PubKeyLen];
+    bool     identity_loaded;
 
-    /* Previous device secret (for rotation window) */
-    uint8_t  prev_secret[SecretLen];
-    bool     prev_secret_loaded;
+    /* Cloud Root Identity (for verifying inbound commands) */
+    uint8_t  cloud_root_pub_key[Ed25519PubKeyLen];
+    bool     cloud_root_loaded;
 
     /* Nonce cache */
     NonceCache nonce_cache;
@@ -119,8 +120,7 @@ ValidationResult validate_payload_hash(const InboundFrame* frame);
 ValidationResult validate_sequence(const InboundFrame* frame, SequenceTracker* tracker);
 ValidationResult validate_signature(
     const InboundFrame* frame,
-    const uint8_t* secret, size_t secret_len,
-    const uint8_t* prev_secret, bool has_prev
+    const uint8_t* pub_key, size_t pub_key_len
 );
 
 /* ── Canonical String Builder ───────────────────────────────────────── */
