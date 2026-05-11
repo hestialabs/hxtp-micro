@@ -10,8 +10,8 @@ void setup() {
     Serial.begin(115200);
     
     hxtp::Config config;
-    config.device_uuid = "00000000-0000-0000-0000-000000000000";
-    config.api_key = "test-key";
+    config.api_base_url = "https://api.hestialabs.in/v1";
+    config.device_uuid  = "00000000-0000-0000-0000-000000000000";
     
     hxtp::Client client(config);
     client.begin();

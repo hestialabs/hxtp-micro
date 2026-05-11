@@ -303,7 +303,6 @@ Core::Core()
     , platform_(nullptr)
     , session_()
     , descriptor_()
-    , secret_loaded_(false)
     , outbound_sequence_(0)
     , val_ctx_({})
 {
@@ -312,7 +311,6 @@ Core::Core()
     memset(ed25519_priv_, 0, sizeof(ed25519_priv_));
     memset(ed25519_pub_hex_, 0, sizeof(ed25519_pub_hex_));
     identity_generated_ = false;
-    memset(device_secret_, 0, sizeof(device_secret_));
 }
 
 Error Core::init(
@@ -361,10 +359,11 @@ Error Core::init(
     /* ── Identity (Ed25519) ────────────────────────── */
     if (!ensure_identity()) return Error::KEYGEN_FAILED;
 
-    /* ── Cloud Root Key ────────────────────────────── */
-    if (config_ && config_->cloud_root_key) {
+    /* ── Cloud Root Key (compile-time trust anchor) ── */
+    {
+        const char* root_hex = HXTP_CLOUD_ROOT_KEY;
         size_t klen = 0;
-        if (crypto::hex_decode(config_->cloud_root_key, strlen(config_->cloud_root_key), val_ctx_.cloud_root_pub_key, &klen)) {
+        if (crypto::hex_decode(root_hex, strlen(root_hex), val_ctx_.cloud_root_pub_key, &klen)) {
             if (klen == Ed25519PubKeyLen) {
                 val_ctx_.cloud_root_loaded = true;
             }
@@ -961,6 +960,9 @@ bool Core::ensure_identity() {
     }
 
     crypto::hex_encode(ed25519_pub_, Ed25519PubKeyLen, ed25519_pub_hex_);
+    memcpy(val_ctx_.device_pub_key, ed25519_pub_, Ed25519PubKeyLen);
+    memcpy(val_ctx_.device_priv_key, ed25519_priv_, Ed25519PrivKeyLen);
+    val_ctx_.identity_loaded = true;
     return true;
 }
 

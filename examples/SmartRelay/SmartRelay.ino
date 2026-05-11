@@ -55,9 +55,8 @@ void setup() {
 
     // 1. Configure the Client
     hxtp::Config config;
-    config.device_uuid   = "00000000-0000-0000-0000-000000000000"; 
-    config.api_key       = "api_key_here";
-    config.verify_server = true; 
+    config.api_base_url = "https://api.hestialabs.in/v1";
+    config.device_uuid  = "00000000-0000-0000-0000-000000000000";
 
     // 2. Initialize the Client
     hxtpClient = new hxtp::Client(config);

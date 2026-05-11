@@ -19,6 +19,7 @@ Bootstrap::Bootstrap(Core* core, WiFiClientSecure* tls_client)
 
 bool Bootstrap::perform(const char* api_url) {
     if (!core_ || !core_->is_initialized()) return false;
+    if (!core_->ensure_identity()) return false;
 
     const char* base_url = api_url ? api_url : core_->config()->api_base_url;
     if (!base_url) return false;
@@ -52,29 +53,15 @@ bool Bootstrap::perform(const char* api_url) {
              nonce);
 
     char signature[Ed25519SigHexLen + 1];
-    bool use_ed25519 = core_->validation_ctx().identity_loaded;
-
-    if (use_ed25519) {
-        /* Ed25519 signing (Preferred) */
-        uint8_t sig_bin[Ed25519SigLen];
-        Error err = crypto::ed25519_sign(
-            reinterpret_cast<const uint8_t*>(canonical), strlen(canonical),
-            core_->validation_ctx().device_priv_key,
-            core_->validation_ctx().device_pub_key,
-            sig_bin
-        );
-        if (err != Error::OK) return false;
-        crypto::hex_encode(sig_bin, Ed25519SigLen, signature);
-    } else {
-        /* HMAC fallback (Initial bootstrap with API Key) */
-        const char* cred = core_->config()->api_key;
-        if (!cred) {
-            Serial.println("[HXTP] ERROR: No credentials available for bootstrap");
-            return false;
-        }
-        crypto::hmac_sha256_hex((const uint8_t*)cred, strlen(cred),
-                                canonical, strlen(canonical), signature);
-    }
+    uint8_t sig_bin[Ed25519SigLen];
+    Error err = crypto::ed25519_sign(
+        reinterpret_cast<const uint8_t*>(canonical), strlen(canonical),
+        core_->validation_ctx().device_priv_key,
+        core_->validation_ctx().device_pub_key,
+        sig_bin
+    );
+    if (err != Error::OK) return false;
+    crypto::hex_encode(sig_bin, Ed25519SigLen, signature);
 
     /* Execute HTTP Request */
     HTTPClient http;
@@ -111,8 +98,14 @@ bool Bootstrap::perform(const char* api_url) {
     http.addHeader("X-HXTP-Nonce", nonce);
     http.addHeader("X-HXTP-Message-ID", msg_id);
     http.addHeader("X-HXTP-Signature", signature);
-    if (use_ed25519) {
-        http.addHeader("X-HXTP-Public-Key", core_->ed25519_pub_hex());
+    http.addHeader("X-HXTP-Public-Key", core_->ed25519_pub_hex());
+    /* Enrollment token from storage (provisioned via SoftAP/dashboard claim) */
+    char enrollment_token[256] = {0};
+    if (core_->storage() && core_->storage()->read_param) {
+        if (core_->storage()->read_param("enrollment_token", enrollment_token, sizeof(enrollment_token))
+            && enrollment_token[0] != '\0') {
+            http.addHeader("X-HXTP-Enrollment-Token", enrollment_token);
+        }
     }
 
     int code = http.GET();

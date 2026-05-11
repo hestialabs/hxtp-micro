@@ -9,13 +9,13 @@
  *  The following are FROZEN and MUST NOT change:
  *
  *    1. Canonical string format (HxTP/3.1):
- *       version|device_id|client_id|message_id|request_id|sequence_number|timestamp|nonce|message_type|payload_hash
+ *       version|device_id|tenant_id|client_id|message_id|request_id|sequence_number|timestamp|nonce|message_type|payload_hash
  *
  *    2. Validation pipeline order (7 steps):
  *       Version → Timestamp → PayloadSize → Nonce → PayloadHash → Sequence → Signature
  *
  *    3. Crypto interface contract:
- *       sha256(), hmac_sha256(), constant_time_equal(), constant_time_hex_equal()
+ *       sha256(), ed25519_sign(), ed25519_verify(), ed25519_keygen()
  *       hex_encode(), hex_decode(), base64_encode(), generate_nonce()
  *       aes256_gcm_decrypt(), aes256_gcm_encrypt()
  *
@@ -61,7 +61,7 @@
  *                        Smaller nonce cache, smaller frame buffer.
  *                        Full crypto. Full validation.
  *   HXTP_CONSTRAINED   — ESP8266 Tier-3 mode. Minimal buffers, no AES-GCM at-rest,
- *                        no OTA. Full HMAC-SHA256. Full 7-step validation.
+ *                        no OTA. Full Ed25519 validation. Full 7-step pipeline.
  *                        Activated automatically on ESP8266 unless overridden.
  */
 
@@ -171,15 +171,25 @@
 
 /*
  * These CANNOT be changed. They exist as documentation and compile guards.
- * HMAC-SHA256 is mandatory on ALL tiers including CONSTRAINED.
+ * Ed25519 signing/verification is mandatory on ALL tiers including CONSTRAINED.
  * The 7-step validation pipeline runs identically on all tiers.
  * Constant-time signature comparison is mandatory on all tiers.
  */
-#define SECURITY_HMAC_SHA256_MANDATORY     1
+#define HXTP_SECURITY_ED25519_MANDATORY        1
 #define HXTP_SECURITY_VALIDATION_7STEP          1
 #define HXTP_SECURITY_CONSTANT_TIME_SIG_CMP     1
 #define HXTP_SECURITY_NO_PLAINTEXT_MODE         1
 #define HXTP_SECURITY_NO_SIGNATURE_DOWNGRADE    1
+
+/* ── Trust Anchors (HxTP/3.1) ────────────────────────────────────────── */
+/* 
+ * The Cloud Root Public Key (Ed25519 Hex).
+ * This is the immutable identity of the Hestia Labs Cloud.
+ * All manifests and server HELLO_ACKs are verified against this key.
+ */
+#ifndef HXTP_CLOUD_ROOT_KEY
+    #define HXTP_CLOUD_ROOT_KEY "6162636465666768696a6b6c6d6e6f707172737475767778797a313233343536"
+#endif
 
 /* ── Memory Footprint Baseline (v1.0.3-embedded-stable) ─────────────── */
 /*

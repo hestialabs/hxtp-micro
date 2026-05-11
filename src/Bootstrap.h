@@ -3,7 +3,7 @@
  * Bootstrap Client — Header
  *
  * Handles operational parameter discovery:
- *   1. Performs HMAC-signed GET /api/v1/devices/{device_id}
+ *   1. Performs Ed25519-signed GET /api/v1/bootstrap
  *   2. Parses MQTT endpoint, heartbeats, and other cloud configs
  *   3. Reconciles with local storage
  *

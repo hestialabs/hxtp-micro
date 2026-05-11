@@ -208,15 +208,14 @@ public:
     ValidationContext&   validation_ctx() { return val_ctx_; }
     int64_t             next_sequence();
     bool                is_initialized() const { return initialized_; }
-    bool                is_secret_loaded() const { return secret_loaded_; }
     const char*         device_id() const { return session_.device_id.c_str(); }
     const char*         tenant_id() const { return session_.tenant_id.c_str(); }
     const char*         client_id() const { return client_id_; }
     const char*         ed25519_pub_hex() const { return ed25519_pub_hex_; }
     Error               ed25519_sign(const uint8_t* msg, size_t len, uint8_t sig[Ed25519SigLen]);
     bool                generate_claim_token(char* out, size_t out_cap);
+    bool                ensure_identity();
     void                set_identity(const char* device_id, const char* priv_hex, const char* pub_hex);
-    const uint8_t*      device_secret() const { return device_secret_; }
     const StorageAdapter* storage() const { return storage_; }
     const Config*       config() const { return config_; }
     const PlatformCrypto* platform() const { return platform_; }
@@ -238,7 +237,6 @@ private:
         char* msg_id_out = nullptr
     );
 
-    bool                    ensure_identity();
     bool                    initialized_;
     const Config*           config_;
     const StorageAdapter*   storage_;
@@ -256,10 +254,6 @@ private:
     uint8_t ed25519_priv_[Ed25519PrivKeyLen];
     char    ed25519_pub_hex_[Ed25519PubKeyLen * 2 + 1];
     bool    identity_generated_;
-
-    /* Secret material (HMAC runtime secret) */
-    uint8_t device_secret_[SecretLen];
-    bool    secret_loaded_;
 
     /* Sequence */
     int64_t outbound_sequence_;

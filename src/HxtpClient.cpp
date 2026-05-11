@@ -121,15 +121,16 @@ Error Client::begin() {
 void Client::connect() {
     if (state_ == ClientState::ERROR_STATE) return;
 
-    /* ── 1. Check if we need provisioning ──────────────── */
+    /* ── 1. Check if we have provisioned WiFi credentials ── */
     char saved_ssid[64] = {0};
-    bool has_wifi = (config_.wifi_ssid && config_.wifi_ssid[0] != '\0');
+    bool has_wifi = false;
     
-    if (!has_wifi && storage_adapter_.read_param) {
+    if (storage_adapter_.read_param) {
         has_wifi = storage_adapter_.read_param("wifi_ssid", saved_ssid, sizeof(saved_ssid));
     }
 
     if (!has_wifi) {
+        /* No stored credentials — enter SoftAP provisioning */
         provisioning_.begin();
         set_state(ClientState::PROVISIONING);
         return;
@@ -168,15 +169,11 @@ void Client::connect() {
         set_state(ClientState::WIFI_CONNECTED);
     } else {
         WiFi.mode(WIFI_STA);
-        if (saved_ssid[0] != '\0') {
-            char saved_pass[64] = {0};
-            if (storage_adapter_.read_param) {
-                storage_adapter_.read_param("wifi_pass", saved_pass, sizeof(saved_pass));
-            }
-            WiFi.begin(saved_ssid, saved_pass);
-        } else {
-            WiFi.begin(config_.wifi_ssid, config_.wifi_password);
+        char saved_pass[64] = {0};
+        if (storage_adapter_.read_param) {
+            storage_adapter_.read_param("wifi_pass", saved_pass, sizeof(saved_pass));
         }
+        WiFi.begin(saved_ssid, saved_pass);
         set_state(ClientState::WIFI_CONNECTING);
     }
 }

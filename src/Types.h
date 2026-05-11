@@ -330,28 +330,20 @@ struct SessionMetadata {
 /* ── SDK Configuration (Minimal) ────────────────────────────────────── */
 
 struct Config {
-    /* Network */
-    const char*  wifi_ssid;
-    const char*  wifi_password;
-
     /* Identity & Bootstrap */
-    const char*  api_base_url;    /* e.g. "https://dash.hestialabs.in/api/v1" */
+    const char*  api_base_url;    /* e.g. "https://api.hestialabs.in/v1" */
     const char*  device_uuid;      /* Permanent hardware/runtime identity */
-    const char*  api_key;          /* Initial bootstrap / session issuance token */
-    const char*  cloud_root_key;   /* Ed25519 Public Key (Hex) */
     
-    /* TLS */
-    const char*  ca_cert;         /* PEM root CA (required in release builds) */
+    /* TLS & Security */
+    const char*  ca_cert;         /* PEM root CA (optional) */
     bool         verify_server;
 
-    /* Tuning */
+    /* Tuning (Advanced) */
     uint32_t     frame_buf_size;
     uint32_t     max_reconnect_delay_ms;
 
     Config() :
-        wifi_ssid(nullptr), wifi_password(nullptr),
-        api_base_url(nullptr), device_uuid(nullptr), api_key(nullptr),
-        cloud_root_key(nullptr),
+        api_base_url(nullptr), device_uuid(nullptr),
         ca_cert(nullptr), verify_server(true),
         frame_buf_size(FrameBufDefault),
         max_reconnect_delay_ms(60000)

@@ -40,12 +40,11 @@ void setup() {
     delay(1000);
     Serial.println("\n--- hxtp-micro Zero-Config Starting ---");
 
-    // 1. Configure the Client
-    // No hardcoded credentials needed — they arrive via Provisioning!
+    // 1. Configure the Client — minimal surface
+    // WiFi arrives via SoftAP provisioning. Trust anchors are compiled in.
     hxtp::Config config;
-    config.device_uuid   = "00000000-0000-0000-0000-000000000000"; // Permanent Hardware UUID
-    config.api_key       = "YOUR_API_KEY";              // From Hestia Cloud Portal
-    config.verify_server = true; // Always enable for production
+    config.api_base_url = "https://api.hestialabs.in/v1";
+    config.device_uuid  = "00000000-0000-0000-0000-000000000000"; // Permanent Hardware UUID
 
     // 2. Initialize the Client
     hxtpClient = new hxtp::Client(config);
