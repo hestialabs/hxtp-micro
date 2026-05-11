@@ -2,8 +2,8 @@
  * HXTP Embedded SDK v1.0.3
  * Cryptographic Operations — Header
  *
- * Provides SHA-256, HMAC-SHA256, AES-256-GCM, constant-time compare,
- * base64 encode, hex encode/decode, and nonce generation.
+ * Provides SHA-256, HMAC-SHA256, base64 encode, hex encode/decode,
+ * nonce generation, UUID v4, and Ed25519 signing/verification.
  *
  * Implementation uses mbedTLS (ESP32) or pluggable backend.
  * Platform-agnostic header. NO Arduino includes.
@@ -58,67 +58,7 @@ Error hmac_sha256(
     uint8_t out[HmacLen]
 );
 
-/**
- * Compute HMAC-SHA256 and produce hex digest.
- */
-Error hmac_sha256_hex(
-    const uint8_t* key, size_t key_len,
-    const char* data, size_t data_len,
-    char out_hex[HmacHexLen + 1]
-);
 
-/* ── Constant-Time Compare ──────────────────────────────────────────── */
-
-/**
- * Constant-time comparison of two byte buffers.
- * Returns true if identical, false otherwise.
- * Timing does not depend on where (or if) the buffers differ.
- */
-bool constant_time_equal(const uint8_t* a, const uint8_t* b, size_t len);
-
-/**
- * Constant-time comparison of two hex strings (case-insensitive).
- */
-bool constant_time_hex_equal(const char* a, const char* b, size_t len);
-
-/* ── AES-256-GCM (feature-gated) ─────────────────────────────────────── */
-
-#if HXTP_FEATURE_AES_GCM
-
-/**
- * Decrypt AES-256-GCM. Input format: IV[12] + CIPHERTEXT[n] + TAG[16]
- * @param key         32-byte key
- * @param input       IV + ciphertext + tag
- * @param input_len   Total input length (must be >= 28)
- * @param output      Plaintext output buffer (must be >= input_len - 28)
- * @param output_len  Receives plaintext length
- * @return            Error::OK or AES_DECRYPT_FAILED
- */
-Error aes256_gcm_decrypt(
-    const uint8_t key[AesKeyLen],
-    const uint8_t* input, size_t input_len,
-    uint8_t* output, size_t* output_len
-);
-
-/**
- * Encrypt AES-256-GCM. Output format: IV[12] + CIPHERTEXT[n] + TAG[16]
- * IV is generated from platform RNG.
- * @param key           32-byte key
- * @param plaintext     Input data
- * @param pt_len        Plaintext length
- * @param output        Output buffer (must be >= pt_len + 28)
- * @param output_len    Receives total output length
- * @param rng           Platform RNG function
- * @return              Error::OK or error
- */
-Error aes256_gcm_encrypt(
-    const uint8_t key[AesKeyLen],
-    const uint8_t* plaintext, size_t pt_len,
-    uint8_t* output, size_t* output_len,
-    bool (*rng)(uint8_t*, size_t)
-);
-
-#endif /* HXTP_FEATURE_AES_GCM */
 
 /* ── Hex Encode/Decode ──────────────────────────────────────────────── */
 

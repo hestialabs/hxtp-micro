@@ -594,12 +594,21 @@ Error Core::process_inbound(
         err = parse_command_payload(&frame);
         if (err != Error::OK) return err;
 
-        /* Execute capability (Execution Safety Check) */
-        CapabilityResult result = capabilities_.execute(
-            frame.command.action.c_str(),
-            frame.params_ptr,
-            frame.params_len
-        );
+        /* Execute capability — prefer ID lookup, fall back to action */
+        CapabilityResult result{};
+        const CapabilityEntry* entry = nullptr;
+        if (frame.command.capability_id > 0 &&
+            capabilities_.lookup_by_id(frame.command.capability_id, &entry) == Error::OK &&
+            entry && entry->handler)
+        {
+            result = entry->handler(frame.params_ptr, frame.params_len, entry->user_ctx);
+        } else {
+            result = capabilities_.execute(
+                frame.command.action.c_str(),
+                frame.params_ptr,
+                frame.params_len
+            );
+        }
 
         /* Build ACK response */
         if (ack_buf && ack_cap > 0 && ack_len) {
@@ -986,7 +995,7 @@ bool Core::generate_claim_token(char* out, size_t out_cap) {
     if (clen < 0 || (size_t)clen >= sizeof(canonical)) return false;
 
     uint8_t sig[Ed25519SigLen];
-    if (ed25519_sign((uint8_t*)canonical, clen, sig) != Error::OK) return false;
+    if (ed25519_sign(reinterpret_cast<uint8_t*>(canonical), clen, sig) != Error::OK) return false;
 
     char sig_hex[Ed25519SigLen * 2 + 1];
     crypto::hex_encode(sig, Ed25519SigLen, sig_hex);

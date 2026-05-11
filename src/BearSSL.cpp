@@ -5,8 +5,6 @@
  * Implements the hxtp::crypto interface using ESP8266 Arduino Crypto.h
  * (which wraps BearSSL) for SHA-256 and HMAC-SHA256.
  *
- * AES-256-GCM is available via raw BearSSL API (bearssl/bearssl_aead.h)
- * but disabled by default in HXTP_CONSTRAINED mode to save stack.
  *
  * NO mbedTLS dependency. Uses only BearSSL (shipped with ESP8266 core).
  *
@@ -24,15 +22,7 @@
 /* ESP8266 Arduino core Crypto.h — wraps BearSSL */
 #include <Crypto.h>
 
-/* Raw BearSSL headers for GCM (if enabled) */
-#if HXTP_FEATURE_AES_GCM
-#include <bearssl/bearssl_block.h>
-#include <bearssl/bearssl_aead.h>
-#include <bearssl/bearssl_ec.h>
-#include <bearssl/bearssl_hmac.h>
-/* #include <bearssl/bearssl_eddsa.h> - Removed, using HxtpCryptoInternal */
-#include <bearssl/bearssl_hash.h>
-#endif
+
 
 namespace hxtp {
 namespace crypto {
@@ -106,8 +96,7 @@ Error sha256(const uint8_t* data, size_t len, uint8_t out[Sha256Len]) {
 
 Error sha256_hex(const char* str, size_t str_len, char out_hex[Sha256HexLen + 1]) {
     uint8_t hash[Sha256Len];
-    Error err = sha256(reinterpret_cast<const uint8_t*>(str), str_len, hash);
-    if (err != Error::OK) return err;
+    sha256(reinterpret_cast<const uint8_t*>(str), str_len, hash);
     hex_encode(hash, Sha256Len, out_hex);
     return Error::OK;
 }
@@ -129,126 +118,6 @@ Error hmac_sha256(
 
     return Error::OK;
 }
-
-Error hmac_sha256_hex(
-    const uint8_t* key, size_t key_len,
-    const char* data, size_t data_len,
-    char out_hex[HmacHexLen + 1]
-) {
-    uint8_t mac[HmacLen];
-    Error err = hmac_sha256(key, key_len,
-                                 reinterpret_cast<const uint8_t*>(data), data_len,
-                                 mac);
-    if (err != Error::OK) return err;
-    hex_encode(mac, HmacLen, out_hex);
-    return Error::OK;
-}
-
-/* ── Constant-Time Compare ──────────────────────────────────────────── */
-
-bool constant_time_equal(const uint8_t* a, const uint8_t* b, size_t len) {
-    volatile uint8_t diff = 0;
-    for (size_t i = 0; i < len; ++i) {
-        diff |= a[i] ^ b[i];
-    }
-    return diff == 0;
-}
-
-bool constant_time_hex_equal(const char* a, const char* b, size_t len) {
-    volatile uint8_t diff = 0;
-    for (size_t i = 0; i < len; ++i) {
-        uint8_t ca = static_cast<uint8_t>(a[i]);
-        uint8_t cb = static_cast<uint8_t>(b[i]);
-        /* Fold A-F to a-f: if in [0x41..0x5A], set bit 5 */
-        ca |= ((ca >= 'A' && ca <= 'Z') ? 0x20 : 0x00);
-        cb |= ((cb >= 'A' && cb <= 'Z') ? 0x20 : 0x00);
-        diff |= ca ^ cb;
-    }
-    return diff == 0;
-}
-
-/* ── AES-256-GCM (via raw BearSSL API) ──────────────────────────────── */
-
-#if HXTP_FEATURE_AES_GCM
-
-Error aes256_gcm_decrypt(
-    const uint8_t key[AesKeyLen],
-    const uint8_t* input, size_t input_len,
-    uint8_t* output, size_t* output_len
-) {
-    /* Format: IV[12] + CIPHERTEXT[n] + TAG[16] */
-    const size_t overhead = AesGcmIvLen + AesGcmTagLen;
-    if (input_len < overhead) return Error::AES_DECRYPT_FAILED;
-
-    const uint8_t* iv   = input;
-    size_t ct_len       = input_len - overhead;
-    const uint8_t* ct   = input + AesGcmIvLen;
-    const uint8_t* tag  = input + AesGcmIvLen + ct_len;
-
-    /* BearSSL AES-256-GCM via constant-time AES engine */
-    br_aes_ct_ctr_keys aes_ctx;
-    br_aes_ct_ctr_init(&aes_ctx, key, AesKeyLen);
-
-    br_gcm_context gcm;
-    br_gcm_init(&gcm, &aes_ctx.vtable, br_ghash_ctmul32);
-
-    br_gcm_reset(&gcm, iv, AesGcmIvLen);
-    /* No AAD */
-    br_gcm_flip(&gcm);
-
-    /* Decrypt in-place: copy ciphertext to output first */
-    memcpy(output, ct, ct_len);
-    br_gcm_run(&gcm, 0 /* decrypt */, output, ct_len);
-
-    /* Verify tag */
-    if (!br_gcm_check_tag(&gcm, tag)) {
-        memset(output, 0, ct_len); /* Clear on failure */
-        return Error::AES_DECRYPT_FAILED;
-    }
-
-    *output_len = ct_len;
-    return Error::OK;
-}
-
-Error aes256_gcm_encrypt(
-    const uint8_t key[AesKeyLen],
-    const uint8_t* plaintext, size_t pt_len,
-    uint8_t* output, size_t* output_len,
-    bool (*rng)(uint8_t*, size_t)
-) {
-    /* Output: IV[12] + CIPHERTEXT[pt_len] + TAG[16] */
-    uint8_t iv[AesGcmIvLen];
-    if (!rng(iv, AesGcmIvLen)) return Error::RNG_FAILED;
-
-    br_aes_ct_ctr_keys aes_ctx;
-    br_aes_ct_ctr_init(&aes_ctx, key, AesKeyLen);
-
-    br_gcm_context gcm;
-    br_gcm_init(&gcm, &aes_ctx.vtable, br_ghash_ctmul32);
-
-    br_gcm_reset(&gcm, iv, AesGcmIvLen);
-    /* No AAD */
-    br_gcm_flip(&gcm);
-
-    /* Encrypt: copy plaintext to output + IV offset, encrypt in-place */
-    uint8_t* ct_out = output + AesGcmIvLen;
-    memcpy(ct_out, plaintext, pt_len);
-    br_gcm_run(&gcm, 1 /* encrypt */, ct_out, pt_len);
-
-    /* Get tag */
-    uint8_t tag[AesGcmTagLen];
-    br_gcm_get_tag(&gcm, tag);
-
-    /* Write IV at beginning */
-    memcpy(output, iv, AesGcmIvLen);
-    /* Write tag at end */
-    memcpy(output + AesGcmIvLen + pt_len, tag, AesGcmTagLen);
-
-    *output_len = AesGcmIvLen + pt_len + AesGcmTagLen;
-    return Error::OK;
-}
-
-#endif /* HXTP_FEATURE_AES_GCM */
 
 /* ── Nonce Generation ───────────────────────────────────────────────── */
 

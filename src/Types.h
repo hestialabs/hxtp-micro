@@ -53,9 +53,7 @@ static constexpr size_t   SecretLen           = 32;
 static constexpr size_t   SecretHexLen       = 64;
 static constexpr size_t   NonceRawMin        = 16;
 static constexpr size_t   NonceB64Min        = 22;
-static constexpr size_t   AesGcmIvLen       = 12;
-static constexpr size_t   AesGcmTagLen      = 16;
-static constexpr size_t   AesKeyLen           = 32;
+
 static constexpr size_t   Ed25519PubKeyLen    = 32;
 static constexpr size_t   Ed25519PrivKeyLen   = 32; /* Seed */
 static constexpr size_t   Ed25519SigLen       = 64;

@@ -49,8 +49,9 @@ static void set25519(gf r, const gf a) {
 
 static void car25519(gf o) {
     int i;
-    i64 c;
     FOR(i,16) {
+        i64 c;
+
         o[i]+=(1LL<<16);
         c=o[i]>>16;
         o[(i+1)*(i<15)]+=c-1+37*(c-1)*(i==15);
@@ -59,16 +60,16 @@ static void car25519(gf o) {
 }
 
 static void sel25519(gf p,gf q,int b) {
-    i64 t,i,c=~(b-1);
+    i64 i,c=~(b-1);
     FOR(i,16) {
-        t= c&(p[i]^q[i]);
+        i64 t= c&(p[i]^q[i]);
         p[i]^=t;
         q[i]^=t;
     }
 }
 
 static void pack25519(u8 *o,const gf n) {
-    int i,j,b;
+    int i,j;
     gf m,t;
     FOR(i,16) t[i]=n[i];
     car25519(t);

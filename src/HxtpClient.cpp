@@ -306,7 +306,7 @@ void Client::tick_time_syncing() {
 
 void Client::tick_bootstrapping() {
     if (bootstrap_.perform()) {
-        SessionMetadata& sess = core_.session();
+        const SessionMetadata& sess = core_.session();
 
         /* Parse mqtts://host:port from sess.mqtt_endpoint */
         char host[64] = {0};
@@ -518,12 +518,21 @@ void Client::mqtt_on_message(const char* topic, const uint8_t* payload, unsigned
     if (state_ == ClientState::HELLO_SENT && !hello_msg_id_.empty()) {
         /* Minimal peek at JSON for ref_message_id */
         char ref_id[37];
-        if (json_get_string((const char*)payload, length, "ref_message_id", ref_id, sizeof(ref_id), nullptr)) {
+        if (json_get_string(reinterpret_cast<const char*>(payload), length, "ref_message_id", ref_id, sizeof(ref_id), nullptr)) {
             if (hello_msg_id_.equals(ref_id)) {
                 Serial.println("[HXTP] HELLO acknowledged by cloud. Transitioning to ACTIVE.");
                 set_state(ClientState::ACTIVE);
                 hello_msg_id_.clear();
             }
+        }
+    }
+
+    if (length >= 4) {
+        MessageType wire_type = static_cast<MessageType>(payload[3]);
+        const char* tstr = frame_type_to_str(wire_type);
+        if (tstr) {
+            Serial.print("[HXTP] RX: ");
+            Serial.println(tstr);
         }
     }
 

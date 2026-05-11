@@ -127,7 +127,7 @@ bool Bootstrap::perform(const char* api_url) {
         }
 
         /* 2. Device/Tenant Identity */
-        if (json_get_string(json, jlen, "device_id", buf, sizeof(buf), nullptr)) sess.device_id.set(buf);
+        if (json_get_string(json, jlen, "device_id", buf, sizeof(buf), nullptr)) core_->set_identity(buf, nullptr, nullptr);
         if (json_get_string(json, jlen, "tenant_id", buf, sizeof(buf), nullptr)) sess.tenant_id.set(buf);
 
         /* 3. MQTT Endpoint & Token */

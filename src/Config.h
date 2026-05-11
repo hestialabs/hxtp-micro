@@ -17,7 +17,6 @@
  *    3. Crypto interface contract:
  *       sha256(), ed25519_sign(), ed25519_verify(), ed25519_keygen()
  *       hex_encode(), hex_decode(), base64_encode(), generate_nonce()
- *       aes256_gcm_decrypt(), aes256_gcm_encrypt()
  *
  *    4. Binary frame format:
  *       [0-1] MAGIC "HX" | [2] VERSION=3 | [3] TYPE | [4-7] JSON_LEN BE | [8..] JSON
@@ -76,20 +75,6 @@
 #endif
 
 /* ── Feature Gate Macros ────────────────────────────────────────────── */
-
-/*
- * HXTP_FEATURE_AES_GCM — AES-256-GCM at-rest encryption.
- *   Enabled on ESP32 (mbedTLS). Available on ESP8266 (BearSSL) but
- *   disabled by default in HXTP_CONSTRAINED to save ~2 KB stack.
- *   Can be force-enabled: -DHXTP_FEATURE_AES_GCM=1
- */
-#ifndef HXTP_FEATURE_AES_GCM
-    #if defined(HXTP_CONSTRAINED)
-        #define HXTP_FEATURE_AES_GCM  0
-    #else
-        #define HXTP_FEATURE_AES_GCM  1
-    #endif
-#endif
 
 /*
  * HXTP_FEATURE_OTA — Over-the-air update support.

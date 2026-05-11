@@ -20,10 +20,7 @@
 
 #include "mbedtls/sha256.h"
 #include "mbedtls/md.h"
-#include "mbedtls/gcm.h"
 #include "mbedtls/version.h"
-#include "mbedtls/ecp.h"
-#include "mbedtls/pk.h"
 
 namespace hxtp {
 namespace crypto {
@@ -114,9 +111,7 @@ Error sha256(const uint8_t* data, size_t len, uint8_t out[Sha256Len]) {
 
 Error sha256_hex(const char* str, size_t str_len, char out_hex[Sha256HexLen + 1]) {
     uint8_t hash[Sha256Len];
-    Error err = sha256(reinterpret_cast<const uint8_t*>(str), str_len, hash);
-    // cppcheck-suppress knownConditionTrueFalse
-    if (err != Error::OK) return err;
+    sha256(reinterpret_cast<const uint8_t*>(str), str_len, hash);
     hex_encode(hash, Sha256Len, out_hex);
     return Error::OK;
 }
@@ -135,134 +130,7 @@ Error hmac_sha256(
     return (ret == 0) ? Error::OK : Error::HMAC_COMPUTE_FAILED;
 }
 
-Error hmac_sha256_hex(
-    const uint8_t* key, size_t key_len,
-    const char* data, size_t data_len,
-    char out_hex[HmacHexLen + 1]
-) {
-    uint8_t mac[HmacLen];
-    Error err = hmac_sha256(key, key_len,
-                                 reinterpret_cast<const uint8_t*>(data), data_len,
-                                 mac);
-    if (err != Error::OK) return err;
-    hex_encode(mac, HmacLen, out_hex);
-    return Error::OK;
-}
 
-/* ── Constant-Time Compare ──────────────────────────────────────────── */
-
-bool constant_time_equal(const uint8_t* a, const uint8_t* b, size_t len) {
-    volatile uint8_t diff = 0;
-    for (size_t i = 0; i < len; ++i) {
-        diff |= a[i] ^ b[i];
-    }
-    return diff == 0;
-}
-
-bool constant_time_hex_equal(const char* a, const char* b, size_t len) {
-    /*
-     * Compare hex strings in constant time.
-     * We fold to lowercase and XOR — timing does not depend on
-     * position of first difference.
-     */
-    volatile uint8_t diff = 0;
-    for (size_t i = 0; i < len; ++i) {
-        uint8_t ca = static_cast<uint8_t>(a[i]);
-        uint8_t cb = static_cast<uint8_t>(b[i]);
-        /* Fold A-F to a-f: if in [0x41..0x5A], set bit 5 */
-        ca |= ((ca >= 'A' && ca <= 'Z') ? 0x20 : 0x00);
-        cb |= ((cb >= 'A' && cb <= 'Z') ? 0x20 : 0x00);
-        diff |= ca ^ cb;
-    }
-    return diff == 0;
-}
-
-/* ── AES-256-GCM ────────────────────────────────────────────────────── */
-
-#if HXTP_FEATURE_AES_GCM
-
-Error aes256_gcm_decrypt(
-    const uint8_t key[AesKeyLen],
-    const uint8_t* input, size_t input_len,
-    uint8_t* output, size_t* output_len
-) {
-    /* Format: IV[12] + CIPHERTEXT[n] + TAG[16] */
-    const size_t overhead = AesGcmIvLen + AesGcmTagLen;
-    if (input_len < overhead) return Error::AES_DECRYPT_FAILED;
-
-    const uint8_t* iv   = input;
-    size_t ct_len       = input_len - overhead;
-    const uint8_t* ct   = input + AesGcmIvLen;
-    const uint8_t* tag  = input + AesGcmIvLen + ct_len;
-
-    mbedtls_gcm_context ctx;
-    mbedtls_gcm_init(&ctx);
-
-    int ret = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, key, 256);
-    if (ret != 0) {
-        mbedtls_gcm_free(&ctx);
-        return Error::AES_DECRYPT_FAILED;
-    }
-
-    ret = mbedtls_gcm_auth_decrypt(
-        &ctx, ct_len,
-        iv, AesGcmIvLen,
-        nullptr, 0,       /* no additional data */
-        tag, AesGcmTagLen,
-        ct, output
-    );
-
-    mbedtls_gcm_free(&ctx);
-
-    if (ret != 0) return Error::AES_DECRYPT_FAILED;
-    *output_len = ct_len;
-    return Error::OK;
-}
-
-Error aes256_gcm_encrypt(
-    const uint8_t key[AesKeyLen],
-    const uint8_t* plaintext, size_t pt_len,
-    uint8_t* output, size_t* output_len,
-    bool (*rng)(uint8_t*, size_t)
-) {
-    /* Output: IV[12] + CIPHERTEXT[pt_len] + TAG[16] */
-    uint8_t iv[AesGcmIvLen];
-    if (!rng(iv, AesGcmIvLen)) return Error::RNG_FAILED;
-
-    mbedtls_gcm_context ctx;
-    mbedtls_gcm_init(&ctx);
-
-    int ret = mbedtls_gcm_setkey(&ctx, MBEDTLS_CIPHER_ID_AES, key, 256);
-    if (ret != 0) {
-        mbedtls_gcm_free(&ctx);
-        return Error::CRYPTO_INIT_FAILED;
-    }
-
-    uint8_t tag[AesGcmTagLen];
-    uint8_t* ct_out = output + AesGcmIvLen;
-
-    ret = mbedtls_gcm_crypt_and_tag(
-        &ctx, MBEDTLS_GCM_ENCRYPT, pt_len,
-        iv, AesGcmIvLen,
-        nullptr, 0,       /* no additional data */
-        plaintext, ct_out,
-        AesGcmTagLen, tag
-    );
-
-    mbedtls_gcm_free(&ctx);
-
-    if (ret != 0) return Error::CRYPTO_INIT_FAILED;
-
-    /* Write IV at beginning */
-    memcpy(output, iv, AesGcmIvLen);
-    /* Write tag at end */
-    memcpy(output + AesGcmIvLen + pt_len, tag, AesGcmTagLen);
-
-    *output_len = AesGcmIvLen + pt_len + AesGcmTagLen;
-    return Error::OK;
-}
-
-#endif /* HXTP_FEATURE_AES_GCM */
 
 /* ── Nonce Generation ───────────────────────────────────────────────── */
 
