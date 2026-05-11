@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.txt)
 [![Platform](https://img.shields.io/badge/platform-ESP32%20%7C%20ESP8266-orange.svg)](https://espressif.com/)
 
-**HxTP-micro** is a high-performance, secure IoT SDK implementing the **HxTP/3.1** protocol.It features zero dynamic allocation in the hot path, strict 7-step Ed25519 validation, and bit-perfect signature parity with Hestia Labs' backend.
+**HxTP-micro**is a high-performance, secure IoT SDK implementing the **HxTP/3.1**protocol.It features zero dynamic allocation in the hot path, strict 7-step Ed25519 validation, and bit-perfect signature parity with Hestia Labs' backend.
 
 ---
 
@@ -92,10 +92,10 @@ That's it. No WiFi passwords, no API keys, no cloud keys in your code.
 
 WiFi credentials are **never hardcoded**. The SDK manages onboarding automatically:
 
-1. **First boot**: No stored credentials → SDK starts a **SoftAP** (`HXTP-XXXX`).
-2. **User connects** to the AP and submits WiFi credentials via the captive portal.
-3. **Credentials persist** in NVS/EEPROM — subsequent boots connect automatically.
-4. **Reconnection** is handled internally with exponential backoff.
+1. **First boot**: No stored credentials → SDK starts a **SoftAP**(`HXTP-XXXX`).
+2. **User connects**to the AP and submits WiFi credentials via the captive portal.
+3. **Credentials persist**in NVS/EEPROM — subsequent boots connect automatically.
+4. **Reconnection**is handled internally with exponential backoff.
 
 ---
 
@@ -105,10 +105,10 @@ WiFi credentials are **never hardcoded**. The SDK manages onboarding automatical
 
 | Component | Source | Purpose |
 |---|---|---|
-| **Device Private Key** | Generated on-device (Ed25519) | Signs all protocol traffic |
-| **Cloud Root Public Key** | Compiled into firmware | Verifies server messages |
-| **MQTT Session Token** | Issued by cloud at bootstrap | Transport-only, short-lived |
-| **Enrollment Token** | Acquired via SoftAP/dashboard claim | One-time bootstrap credential |
+| **Device Private Key**| Generated on-device (Ed25519) | Signs all protocol traffic |
+| **Cloud Root Public Key**| Compiled into firmware | Verifies server messages |
+| **MQTT Session Token**| Issued by cloud at bootstrap | Transport-only, short-lived |
+| **Enrollment Token**| Acquired via SoftAP/dashboard claim | One-time bootstrap credential |
 
 None of these appear in the developer's `Config` struct. They are all internally managed.
 
@@ -116,13 +116,13 @@ None of these appear in the developer's `Config` struct. They are all internally
 
 Every inbound message passes through a hardened pipeline:
 
-1. **Version Check** — Rejects protocol version mismatch (must be HxTP/3.1).
-2. **Timestamp Freshness** — Enforces strict time windows (±30s).
-3. **Payload Size** — Prevents buffer overflow via size enforcement.
-4. **Nonce Uniqueness** — Ring-buffered cache protects against replay.
-5. **Payload Hash** — SHA-256 integrity verification.
-6. **Sequence Monotonicity** — Protects against out-of-order execution.
-7. **Ed25519 Signature** — Cryptographic verification using the Cloud Root Key.
+1. **Version Check**— Rejects protocol version mismatch (must be HxTP/3.1).
+2. **Timestamp Freshness**— Enforces strict time windows (±30s).
+3. **Payload Size**— Prevents buffer overflow via size enforcement.
+4. **Nonce Uniqueness**— Ring-buffered cache protects against replay.
+5. **Payload Hash**— SHA-256 integrity verification.
+6. **Sequence Monotonicity**— Protects against out-of-order execution.
+7. **Ed25519 Signature**— Cryptographic verification using the Cloud Root Key.
 
 ---
 
