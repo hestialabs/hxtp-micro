@@ -3,7 +3,6 @@
  * FULL and COMPLETE Ed25519 + SHA-512 implementation.
  * Ported from TweetNaCl (Public Domain).
  *
- * NO PLACEHOLDERS. NO OMISSIONS. NO STUBS.
  */
 
 #include "HxtpCryptoInternal.h"
