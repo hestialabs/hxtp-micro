@@ -527,7 +527,7 @@ void Client::mqtt_on_message(const char* topic, const uint8_t* payload, unsigned
         }
     }
 
-    if (length >= 4) {
+    if (length >= HeaderSize) {
         MessageType wire_type = static_cast<MessageType>(payload[3]);
         const char* tstr = frame_type_to_str(wire_type);
         if (tstr) {
