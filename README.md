@@ -8,7 +8,7 @@
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
 - **Zero Dynamic Allocation**: High-performance core designed for memory-constrained environments.
 - **HxTP/3.1 Ed25519 Pipeline**: Full implementation of the hardened 7-step security pipeline.
@@ -21,7 +21,7 @@
 
 ---
 
-## ⏱️ Quick Start (PlatformIO)
+## ⏱ Quick Start (PlatformIO)
 
 ### 1. Add Dependencies
 Add the following to your `platformio.ini`:
@@ -33,13 +33,13 @@ board = esp32dev
 framework = arduino
 
 lib_deps =
-    hxtp-micro@^1.0.3
-    knolleary/PubSubClient@^2.8
-    bblanchon/ArduinoJson@^7.0.0
+  hxtp-micro@^1.0.3
+  knolleary/PubSubClient@^2.8
+  bblanchon/ArduinoJson@^7.0.0
 
 build_flags =
-    -std=gnu++17
-    -DHXTP_RELEASE=1
+  -std=gnu++17
+  -DHXTP_RELEASE=1
 ```
 
 ### 2. Basic Implementation
@@ -52,35 +52,35 @@ The SDK handles WiFi provisioning, identity generation, enrollment, bootstrap, a
 hxtp::Client* client = nullptr;
 
 hxtp::CapabilityResult toggle_led(
-    const char* params,
-    uint32_t len,
-    void* ctx
+  const char* params,
+  uint32_t len,
+  void* ctx
 ) {
-    // Your device logic (e.g. digitalWrite)
-    return { true, 0, "" };
+  // Your device logic (e.g. digitalWrite)
+  return { true, 0, "" };
 }
 
 void setup() {
-    Serial.begin(115200);
+  Serial.begin(115200);
 
-    hxtp::Config config;
-    config.api_base_url = "https://api.hestialabs.in/v1";
-    config.device_uuid  = "permanent-hardware-uuid";
+  hxtp::Config config;
+  config.api_base_url = "https://api.hestialabs.in/v1";
+  config.device_uuid = "permanent-hardware-uuid";
 
-    client = new hxtp::Client(config);
+  client = new hxtp::Client(config);
 
-    // Register capabilities
-    client->registerCapability(1, "toggle_led", toggle_led);
+  // Register capabilities
+  client->registerCapability(1, "toggle_led", toggle_led);
 
-    // Start — handles everything internally
-    client->begin();
-    client->connect();
+  // Start — handles everything internally
+  client->begin();
+  client->connect();
 }
 
 void loop() {
-    if (client) {
-        client->loop();
-    }
+  if (client) {
+    client->loop();
+  }
 }
 ```
 
@@ -88,7 +88,7 @@ That's it. No WiFi passwords, no API keys, no cloud keys in your code.
 
 ---
 
-## 📶 WiFi Provisioning
+## WiFi Provisioning
 
 WiFi credentials are **never hardcoded**. The SDK manages onboarding automatically:
 
@@ -99,7 +99,7 @@ WiFi credentials are **never hardcoded**. The SDK manages onboarding automatical
 
 ---
 
-## 🔐 Security Architecture
+## Security Architecture
 
 ### Trust Model
 
@@ -126,30 +126,30 @@ Every inbound message passes through a hardened pipeline:
 
 ---
 
-## 🔧 Advanced Configuration
+## Advanced Configuration
 
 For production deployments, you may optionally configure:
 
 ```cpp
 hxtp::Config config;
-config.api_base_url          = "https://api.hestialabs.in/v1";  // Required
-config.device_uuid           = "hardware-uuid";                  // Required
-config.ca_cert               = pemCertString;                    // Optional: custom CA
-config.verify_server         = true;                             // Default: true
-config.frame_buf_size        = 4096;                             // Default: 4096
-config.max_reconnect_delay_ms = 60000;                           // Default: 60000
+config.api_base_url     = "https://api.hestialabs.in/v1"; // Required
+config.device_uuid      = "hardware-uuid";         // Required
+config.ca_cert        = pemCertString;          // Optional: custom CA
+config.verify_server     = true;               // Default: true
+config.frame_buf_size    = 4096;               // Default: 4096
+config.max_reconnect_delay_ms = 60000;              // Default: 60000
 ```
 
 To override the compiled-in Cloud Root Key (e.g. for staging environments), use a build flag:
 
 ```ini
 build_flags =
-    -DHXTP_CLOUD_ROOT_KEY=\"your_staging_key_hex\"
+  -DHXTP_CLOUD_ROOT_KEY=\"your_staging_key_hex\"
 ```
 
 ---
 
-## 📊 Memory Footprint
+## Memory Footprint
 
 | Target | RAM | Flash |
 |---|---|---|
